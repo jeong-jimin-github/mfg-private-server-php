@@ -31,6 +31,8 @@ PHP 8.x port of `jeong-jimin-github/mfg-private-server` for shared-hosting deplo
 - `src/Aog/FeatureDispatcher.php` — gacha / spirit gym
 - `src/Aog/GachaPools.php` — original generated gacha-pool loader
 - `src/Aog/MiscDispatcher.php` / `StampStore.php` — sticker chat / misc compatibility routes
+- `src/Debug/CaptureStore.php` / `CaptureComparator.php` — optional real-client capture and structural diff support
+- `tools/compare_capture_runs.php` — compare Python-reference and PHP capture runs
 - `src/Mahjong/Mahjong.php` — tile maths + shanten/waits
 - `src/Mahjong/HandEvaluator.php` — yaku/fu/han evaluation
 - `src/Mahjong/YakuBits.php` — client-facing yaku bit mapping
@@ -112,6 +114,7 @@ PHP 8.x port of `jeong-jimin-github/mfg-private-server` for shared-hosting deplo
 | `VFG_GACHA_ALL` | off | default 27 safe series; `1`, `true`, `yes`, or `on` advertises all 141 catalog series |
 | `VFG_CARDMNG_MODE` | `compat` | `strict` restores malformed-card quarantine behavior |
 | `VFG_CARDMNG_INQUIRE_MODE` | `auto` | `new` always returns the new-card response |
+| `VFG_CAPTURE_DIR` | disabled | writable directory for decoded request/response XML plus transport metadata/binary captures; keep it outside the web root |
 
 ## Database configuration
 
@@ -138,6 +141,31 @@ the same `Database` API and both dialects have CI coverage. CI also creates a
 second MySQL connection to verify that client state, serialized matches, sticker
 chat and gacha transactions survive independent PHP requests.
 
+## Real-client capture comparison
+
+Captures are disabled by default. Set `VFG_CAPTURE_DIR` to a writable directory
+outside the public document root before starting PHP-FPM or the local PHP server.
+The PHP front controller then stores decoded request/response XML plus transport
+metadata/binaries for e-Amusement traffic and decoded AOG requests/responses.
+
+After collecting equivalent sessions from the Python reference and PHP port,
+compare them structurally with:
+
+```bash
+php tools/compare_capture_runs.php /path/to/python-run /path/to/php-run
+```
+
+The default comparison ignores dynamic XML values such as IDs/timestamps but
+preserves node structure, attributes and KBin `__type` metadata. Add `--values`
+when the two sessions are deterministic enough for exact value comparison:
+
+```bash
+php tools/compare_capture_runs.php --values /path/to/python-run /path/to/php-run
+```
+
+The comparator returns a non-zero exit status on differences, so captured
+arcade-client sessions can also be used as CI/regression fixtures later.
+
 ## Tests
 
 GitHub Actions runs the main regression suite on PHP 8.1, 8.2 and 8.3, a real
@@ -161,7 +189,9 @@ soak set is 41 complete matches, 314 kyoku and 5,233 client loops.
 `tests/http_transport_client.php` sends the real binary RC4 + LZ77 + KBin wire
 format through a live `php -S` socket and checks card quarantine, PASELI,
 sticker/state persistence, and all 45 AOG routes through the public HTTP entry
-point.
+point. `tests/http_facility_ip4_client.php` validates the facility IPv4 field
+through the same binary path, and `tests/http_card_entry_client.php` replays the
+captured physical-card load order from `vfgcard.inquire` through `player_record`.
 
 Shared-hosting configuration is also regression-tested. When the project root
 itself is exposed as the document root, `.htaccess` denies direct access to
@@ -177,6 +207,8 @@ php tests/protocol_test.php
 php tests/kbin_test.php
 php tests/app_transport_e2e_test.php
 php tests/http_transport_client.php       # requires the CI-style local PHP server
+php tests/http_facility_ip4_client.php    # same server
+php tests/http_card_entry_client.php      # same server
 php tests/health_test.php
 php tests/cardmng_eacoin_test.php
 php tests/eamuse_bootstrap_test.php
@@ -198,13 +230,13 @@ php tests/aog_routes_test.php
 ## Remaining parity work
 
 The Python server remains the reference implementation. Missing top-level routes,
-deterministic full matches, representative multi-seed matches, real HTTP routing
-and database request persistence now all have automated PHP coverage. The
-remaining work requires evidence from the actual arcade client rather than more
-synthetic server-only tests:
+deterministic full matches, representative multi-seed matches, real HTTP routing,
+database request persistence and the captured card-entry ordering now have
+automated PHP coverage. The remaining work requires evidence from the actual
+arcade client rather than more synthetic server-only tests:
 
-- response-by-response comparison against captured real-client requests and responses, especially binary kbin attribute/type metadata
-- real arcade-client confirmation for fields, request ordering and timing behavior that synthetic fixtures cannot reproduce
+- response-by-response comparison of Python/PHP real-client capture runs, especially binary KBin attribute/type metadata
+- real arcade-client confirmation for fields, request ordering and timing behavior not exercised in the available captures
 
 ## Shared hosting
 
