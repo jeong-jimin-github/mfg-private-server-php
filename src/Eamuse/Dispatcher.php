@@ -82,7 +82,7 @@ final class Dispatcher
         if (in_array($method, ['bindmodel','bindcard'], true) && $refid === '') {
             return $this->cardXml($wireNode, ' status="110"');
         }
-        if (!$canonical && $rawCard !== '' && $strict) {
+        if (!$canonical && $rawCard !== '' && $strict && in_array($method, ['inquire','getrefid'], true)) {
             return $this->cardXml($wireNode, $method === 'inquire' ? ' status="112"' : ' status="110"');
         }
 
@@ -95,27 +95,26 @@ final class Dispatcher
             if (!$rec || !(int)$rec['issued']) {
                 return $this->cardXml($wireNode, ' status="112"');
             }
-            $attrs = ' binded="' . ((int)$rec['bound'] ? '1' : '0') . '" dataid="' . $this->x($rec['refid']) . '" refid="' . $this->x($rec['refid']) . '" newflag="' . ((int)$rec['bound'] ? '0' : '1') . '" expired="0" exflag="0" ecflag="1"';
+            $attrs = ' binded="' . ((int)$rec['bound'] ? '1' : '0') . '" dataid="' . $this->x((string)$rec['refid']) . '" refid="' . $this->x((string)$rec['refid']) . '" newflag="' . ((int)$rec['bound'] ? '0' : '1') . '" expired="0" exflag="0" ecflag="1"';
             if ((int)$rec['bound']) {
-                $attrs .= ' lastupdate="' . (int)$rec['updated_at'] . '"';
+                $attrs .= ' lastupdate="' . (int)($rec['updated_at'] ?: $rec['created_at'] ?: time()) . '"';
             }
             return $this->cardXml($wireNode, $attrs);
         }
         if ($method === 'getrefid') {
-            $pin = $node ? (string)($node['passwd'] ?? '') : '';
+            $pin = $node ? trim((string)($node['passwd'] ?? '')) : '';
             $existing = $this->db->getCard($cardId);
-            if (!$canonical && $existing && (int)$existing['issued']) {
-                return $this->cardXml($wireNode, ' refid="' . $this->x($existing['refid']) . '" dataid="' . $this->x($existing['refid']) . '"');
-            }
-            $rec = $this->db->issueCard($cardId, preg_match('/^\d{4}$/', $pin) ? $pin : '0000');
-            return $this->cardXml($wireNode, ' refid="' . $this->x($rec['refid']) . '" dataid="' . $this->x($rec['refid']) . '"');
+            $existingPin = is_array($existing) ? (string)($existing['pin'] ?? '') : '';
+            $safePin = preg_match('/^\d{4}$/', $pin) ? $pin : (preg_match('/^\d{4}$/', $existingPin) ? $existingPin : '0000');
+            $rec = $this->db->issueCard($cardId, $safePin);
+            return $this->cardXml($wireNode, ' refid="' . $this->x((string)$rec['refid']) . '" dataid="' . $this->x((string)$rec['refid']) . '"');
         }
         if ($method === 'authpass') {
             return $this->cardXml($wireNode, ' status="0"');
         }
         if (in_array($method, ['bindmodel','bindcard'], true)) {
             $rec = $this->db->bindCardByRefid($refid);
-            return $rec ? $this->cardXml($wireNode, ' dataid="' . $this->x($rec['refid']) . '"') : $this->cardXml($wireNode, ' status="110"');
+            return $rec ? $this->cardXml($wireNode, ' dataid="' . $this->x((string)$rec['refid']) . '"') : $this->cardXml($wireNode, ' status="110"');
         }
         if ($method === 'getdatalist') {
             return $this->cardXml($wireNode, '');
