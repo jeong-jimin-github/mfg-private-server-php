@@ -27,6 +27,8 @@ jobs:
         run: php tests/kbin_test.php
       - name: Cardmng and eacoin parity
         run: php tests/cardmng_eacoin_test.php
+      - name: e-Amusement bootstrap parity
+        run: php tests/eamuse_bootstrap_test.php
       - name: Mahjong core
         run: php tests/mahjong_test.php
       - name: Score math
