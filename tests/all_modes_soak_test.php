@@ -27,7 +27,13 @@ final class AllModesClient
     private int $kyokuStarts=0;
     private bool $done=false;
 
-    public function __construct(private Dispatcher $d,private Database $db,private string $pcuid,private int $gmode){}
+    public function __construct(
+        private Dispatcher $d,
+        private Database $db,
+        private string $pcuid,
+        private int $gmode,
+        private int $seedBase=0x534F0000,
+    ){}
 
     /** @return array{kyoku:int,loops:int,players:int} */
     public function run():array
@@ -37,7 +43,7 @@ final class AllModesClient
         $this->pindex=(int)$entry->entry->pindex;$this->nextSno=(int)$entry->entry->next_sno;
 
         $match=$this->db->getMatch($this->pcuid);as_ok(is_array($match)&&is_array($match['table']??null),'match not persisted gmode='.$this->gmode);
-        $match['table']['seed']=0x534F0000+$this->gmode;
+        $match['table']['seed']=$this->seedBase+$this->gmode;
         $this->db->saveMatch($this->pcuid,$match);
 
         $this->d->dispatch('gget',['pcuid'=>$this->pcuid,'ready'=>'0','next_sno'=>(string)$this->nextSno]);
@@ -111,10 +117,20 @@ final class AllModesClient
 }
 
 $db=new Database('sqlite::memory:');$d=new Dispatcher($db);
-$totalLoops=0;$totalKyoku=0;
-for($gmode=1;$gmode<=23;$gmode++){
-    $r=(new AllModesClient($d,$db,'SOAK-'.$gmode,$gmode))->run();
-    $totalLoops+=$r['loops'];$totalKyoku+=$r['kyoku'];
-    echo 'gmode='.$gmode.' kyoku='.$r['kyoku'].' loops='.$r['loops'].' players='.$r['players']."\n";
+$seedRaw=trim((string)(getenv('SOAK_SEED_BASE')?:''));
+$seedBase=$seedRaw!==''?intval($seedRaw,0):0x534F0000;
+$modesRaw=trim((string)(getenv('SOAK_MODES')?:''));
+if($modesRaw==='')$modes=range(1,23);
+else{
+    $modes=[];
+    foreach(explode(',',$modesRaw) as $part){$g=(int)trim($part);if($g>=1&&$g<=23&&!in_array($g,$modes,true))$modes[]=$g;}
+    as_ok($modes!==[],'SOAK_MODES selected no valid modes');
 }
-echo 'all modes soak OK modes=23 kyoku='.$totalKyoku.' loops='.$totalLoops."\n";
+$totalLoops=0;$totalKyoku=0;
+foreach($modes as $gmode){
+    $pcuid='SOAK-'.dechex($seedBase).'-'.$gmode;
+    $r=(new AllModesClient($d,$db,$pcuid,$gmode,$seedBase))->run();
+    $totalLoops+=$r['loops'];$totalKyoku+=$r['kyoku'];
+    echo 'seed=0x'.dechex($seedBase).' gmode='.$gmode.' kyoku='.$r['kyoku'].' loops='.$r['loops'].' players='.$r['players']."\n";
+}
+echo 'match soak OK modes='.count($modes).' seed=0x'.dechex($seedBase).' kyoku='.$totalKyoku.' loops='.$totalLoops."\n";
