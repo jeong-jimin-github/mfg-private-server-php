@@ -213,17 +213,34 @@ final class Table
     private function applyTsumo(int $seat):void
     {
         $tile=$this->s['drawn'][$seat];if($tile===null)return;$res=$this->winResult($seat,(int)$tile,true);if($res===null)return;
+        $before=array_values(array_pad(array_map('intval',$this->s['scores']),4,0));$yaku=[0,0,0,0];$kyo=[0,0,0,0];$fu=[0,0,0,0];
         $pay=ScoreMath::payments((int)$this->s['taku'],(int)$res['rank'],(int)$res['fu'],$seat===$this->oya(),true);$gain=0;
-        for($s=0;$s<(int)$this->s['seats'];$s++){if($s===$seat)continue;$amt=$seat===$this->oya()?$pay['ko']:($s===$this->oya()?$pay['oya']:$pay['ko']);$amt+=(int)$this->s['honba']*100;$this->s['scores'][$s]-=$amt;$gain+=$amt;}
-        $gain+=(int)$this->s['kyotaku']*1000;$this->s['scores'][$seat]+=$gain;$this->s['kyotaku']=0;
-        $this->cell(self::K_TSUMOAGARI,$this->winXml($seat,$seat,(int)$tile,$res,$gain));$this->finishKyoku([$seat],false);
+        for($s=0;$s<(int)$this->s['seats'];$s++){
+            if($s===$seat)continue;$amt=$seat===$this->oya()?$pay['ko']:($s===$this->oya()?$pay['oya']:$pay['ko']);
+            $yaku[$s]=-(int)$amt;$fu[$s]=-100*(int)$this->s['honba'];$gain+=(int)$amt;
+        }
+        $yaku[$seat]=$gain;$fu[$seat]=100*(int)$this->s['honba']*((int)$this->s['seats']-1);$kyo[$seat]=1000*(int)$this->s['kyotaku'];
+        for($i=0;$i<4;$i++)$this->s['scores'][$i]=$before[$i]+$yaku[$i]+$kyo[$i]+$fu[$i];$this->s['kyotaku']=0;
+        $inner='<pindex>'.$seat.'</pindex><dora_open>'.(int)$this->s['dora_open'].'</dora_open>'
+            .$this->ints('dora',$this->pais($this->s['dora_ind'])).$this->ints('ura_dora',$this->pais($this->s['ura_ind']))
+            .ResultXml::yaku('yaku',$res,(int)$tile,$this->s['hands'][$seat]).ResultXml::calcScores($before,$yaku,$kyo,$fu);
+        $this->cell(self::K_TSUMOAGARI,$inner);$this->finishKyoku([$seat],false);
     }
 
     private function applyRon(int $seat,int $from,int $tile,bool $chankan=false):void
     {
-        $res=$this->winResult($seat,$tile,false,$chankan);if($res===null)return;$pay=ScoreMath::payments((int)$this->s['taku'],(int)$res['rank'],(int)$res['fu'],$seat===$this->oya(),false);
-        $amt=(int)$pay['total']+(int)$this->s['honba']*300;$this->s['scores'][$from]-=$amt;$gain=$amt+(int)$this->s['kyotaku']*1000;$this->s['scores'][$seat]+=$gain;$this->s['kyotaku']=0;
-        $this->cell(self::K_RON,$this->winXml($seat,$from,$tile,$res,$gain));$this->finishKyoku([$seat],false);
+        $res=$this->winResult($seat,$tile,false,$chankan);if($res===null)return;
+        $before=array_values(array_pad(array_map('intval',$this->s['scores']),4,0));$yaku=[0,0,0,0];$kyo=[0,0,0,0];$fu=[0,0,0,0];
+        $pay=ScoreMath::payments((int)$this->s['taku'],(int)$res['rank'],(int)$res['fu'],$seat===$this->oya(),false);$total=(int)$pay['total'];
+        $yaku[$seat]+=$total;$yaku[$from]-=$total;$fu[$seat]+=300*(int)$this->s['honba'];$fu[$from]-=300*(int)$this->s['honba'];$kyo[$seat]+=1000*(int)$this->s['kyotaku'];
+        for($i=0;$i<4;$i++)$this->s['scores'][$i]=$before[$i]+$yaku[$i]+$kyo[$i]+$fu[$i];$this->s['kyotaku']=0;
+        $inner='<furikomi_pindex>'.$from.'</furikomi_pindex>'.$this->ints('ron_flg',array_map(fn($i)=>$i===$seat?1:0,range(0,3)))
+            .'<dora_open>'.(int)$this->s['dora_open'].'</dora_open>'.$this->ints('dora',$this->pais($this->s['dora_ind'])).$this->ints('ura_dora',$this->pais($this->s['ura_ind']));
+        for($i=0;$i<4;$i++){
+            if($i===$seat){$hand=$this->s['hands'][$i];$hand[]=$tile;sort($hand);$inner.=ResultXml::yaku('yaku'.$i,$res,$tile,$hand);}
+            else $inner.=ResultXml::yaku('yaku'.$i,null,$tile,array_fill(0,13,0));
+        }
+        $inner.=ResultXml::calcScores($before,$yaku,$kyo,$fu);$this->cell(self::K_RON,$inner);$this->finishKyoku([$seat],false);
     }
 
     /** @return array<string,mixed>|null */
@@ -239,10 +256,6 @@ final class Table
         $extra=SituationalYaku::evaluate($haitei,$houtei,$tsumo&&!empty($this->s['last_draw_rinshan']),$chankan,$tenho,$chiho);
         return SituationalYaku::merge($base,$extra);
     }
-
-    /** @param array<string,mixed> $res */
-    private function winXml(int $winner,int $from,int $tile,array $res,int $gain):string
-    {$yaku='';foreach($res['yaku'] as $i=>$name)$yaku.='<yaku_'.$i.'><name>'.$name.'</name></yaku_'.$i.'>';return '<pindex>'.$winner.'</pindex><sute_pindex>'.$from.'</sute_pindex><pai>'.Mahjong::idxToPai($tile).'</pai><han>'.(int)$res['han'].'</han><fu>'.(int)$res['fu'].'</fu><dora>'.(int)$res['dora'].'</dora><get_score>'.$gain.'</get_score><yaku>'.$yaku.'</yaku>';}
 
     /** @param list<int> $winners */
     private function finishKyoku(array $winners,bool $draw,array $tenpai=[]):void
