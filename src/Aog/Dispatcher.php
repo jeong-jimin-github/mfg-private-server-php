@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Mfg\Aog;
 
+use Mfg\Mahjong\Table;
 use Mfg\Storage\Database;
 
 final class Dispatcher
@@ -11,7 +12,7 @@ final class Dispatcher
     private const GAME_MODES = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
     private const GMODE_TAKU = [1=>0,2=>1,3=>2,4=>3,5=>0,6=>0,7=>2,8=>0,9=>0,10=>2,11=>0,12=>2,13=>0,14=>2,15=>0,16=>0,17=>2,18=>2,19=>2,20=>0,21=>2,22=>0,23=>2];
     private const SEATS = [0=>4,1=>4,2=>3,3=>2];
-    private const START_SCORE = [0=>25000,1=>25000,2=>35000,3=>50000];
+    private const START_SCORE = [0=>25000,1=>25000,2=>35000,3=>35000];
 
     public function __construct(private Database $db) {}
 
@@ -28,6 +29,8 @@ final class Dispatcher
             'client_state_read' => $this->clientStateRead($form),
             'client_state_write' => $this->clientStateWrite($form),
             'entry_game' => $this->entryGame($form),
+            'gget' => $this->gget($form),
+            'gpost' => $this->gpost($form),
             'end_game', 'kiken_game' => $this->endGame($form),
             'end_show' => $this->endShow($form),
             'chk_tabooword' => $this->xml('<result>0</result>'),
@@ -160,10 +163,64 @@ final class Dispatcher
             'name'=>(string)($profile['payload']['name'] ?? $profile['name'] ?? 'ゲスト'),
             'state'=>'matching',
             'next_sno'=>0,
+            'table'=>Table::create($taku,0),
         ];
         $this->db->saveMatch($pcuid, $match);
         $url = rtrim($this->baseUrl(), '/') . '/aog/';
         return $this->xml('<entry><gserv_id>1</gserv_id><tid>' . $tid . '</tid><pindex>0</pindex><next_sno>0</next_sno><last_cyoukou_num>3</last_cyoukou_num><cyoukou_num>3</cyoukou_num><ste_oya1_limit_time>15000</ste_oya1_limit_time><ste_limit_time>10000</ste_limit_time><ste_reechi1_limit_time>15000</ste_reechi1_limit_time><naki_limit_time>8000</naki_limit_time><agari_limit_time>10000</agari_limit_time><naki_choice_limit_time>8000</naki_choice_limit_time><reechi_choice_limit_time>8000</reechi_choice_limit_time><last_cyoukou_limit_time>30000</last_cyoukou_limit_time><last_time>30000</last_time><gserv_url>' . $this->x($url) . '</gserv_url><pay_mode>0</pay_mode><gmode>' . $gmode . '</gmode></entry>');
+    }
+
+    private function gget(array $form): string
+    {
+        $pcuid = (string)($form['pcuid'] ?? 'GUEST');
+        $match = $this->db->getMatch($pcuid) ?? ['gmode'=>1,'taku'=>0,'seats'=>4,'tid'=>1,'pindex'=>0,'mid'=>1,'name'=>'ゲスト','state'=>'matching','table'=>Table::create(0,0)];
+        $must = $this->must($form);
+        $ready = ((string)($form['ready'] ?? '')) === '1';
+        $nextSno = (int)($form['next_sno'] ?? ($must[5] ?? 0));
+
+        $table = new Table(is_array($match['table'] ?? null) ? $match['table'] : Table::create((int)$match['taku'],0));
+        if ($ready && (($match['state'] ?? '') === 'matching')) {
+            $table->startKyoku();
+            $match['state'] = 'playing';
+        }
+        if ($ready) $table->flushPending();
+        $match['table'] = $table->state();
+        $this->db->saveMatch($pcuid,$match);
+
+        $matching = $this->matchingXml($match);
+        $tai = $ready ? $table->cellsFrom($nextSno) : '';
+        return $this->xml('<game><all_ready>'.($ready?1:0).'</all_ready>'.$matching.$tai.'</game>');
+    }
+
+    private function gpost(array $form): string
+    {
+        $pcuid = (string)($form['pcuid'] ?? 'GUEST');
+        $match = $this->db->getMatch($pcuid);
+        if (!$match) return $this->xml('<game><taikyoku><cell_info available="0" /></taikyoku></game>');
+        $must = $this->must($form);
+        $kind = (int)($form['kind'] ?? ($must[6] ?? 0));
+        $pindex = (int)($form['pindex'] ?? ($must[3] ?? 0));
+        $pai = (int)($form['pai'] ?? ($must[9] ?? 0));
+        $reach = (int)($form['reach'] ?? ($must[12] ?? 0));
+        $tsumogiri = (int)($form['tsumogiri'] ?? ($must[13] ?? 0));
+        $table = new Table(is_array($match['table'] ?? null) ? $match['table'] : Table::create((int)$match['taku'],0));
+        $before = count($table->state()['cells'] ?? []);
+        $table->onCommand($kind,$pindex,$pai,$reach,$tsumogiri);
+        $table->flushPending();
+        $match['table']=$table->state();
+        $this->db->saveMatch($pcuid,$match);
+        return $this->xml('<game>'.$table->cellsFrom($before).'</game>');
+    }
+
+    private function matchingXml(array $match): string
+    {
+        $seats=(int)($match['seats'] ?? 4);$human=(int)($match['pindex'] ?? 0);$mid=(int)($match['mid'] ?? 1);$name=(string)($match['name'] ?? 'ゲスト');
+        $s='<mwait><tid>'.(int)($match['tid'] ?? 1).'</tid><pmax>'.$seats.'</pmax>';
+        for($i=0;$i<4;$i++) {
+            if($i===$human)$s.='<player_'.$i.' ptype="1"><mid>'.$mid.'</mid><name>'.$this->x($name).'</name><zaseki>'.$i.'</zaseki><cpu_level>0</cpu_level></player_'.$i.'>';
+            elseif($i<$seats)$s.='<player_'.$i.' ptype="3"><mid>0</mid><name>CPU</name><zaseki>'.$i.'</zaseki><cpu_level>1</cpu_level><character_obj>OID_CHARACTER_'.($i+1).'</character_obj></player_'.$i.'>';
+        }
+        return $s.'</mwait>';
     }
 
     private function endGame(array $form): string
@@ -171,6 +228,7 @@ final class Dispatcher
         $pcuid = (string)($form['pcuid'] ?? 'GUEST');
         $m = $this->db->getMatch($pcuid) ?? [];
         $m['state'] = 'game_end';
+        if (isset($m['table']) && is_array($m['table'])) { $m['table']['state']='game_end'; $m['table']['finished']=true; }
         $this->db->saveMatch($pcuid, $m);
         return $this->xml('<mgresult><result>0</result></mgresult>');
     }
@@ -198,6 +256,14 @@ final class Dispatcher
         $s = '<battle_item_settings><basic_settings/><playmode_settings>';
         foreach (self::GAME_MODES as $gmode) $s .= '<setting gmode="' . $gmode . '" taku_class="1"/>';
         return $s . '</playmode_settings></battle_item_settings>';
+    }
+
+    /** @return list<string> */
+    private function must(array $form): array
+    {
+        $raw=(string)($form['must'] ?? '');
+        if($raw==='')return [];
+        return array_map('trim',explode(',',$raw));
     }
 
     private function infoData(string $kind, string $payload): string
