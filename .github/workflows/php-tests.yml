@@ -79,6 +79,8 @@ jobs:
         run: php tests/multi_ron_test.php
       - name: Gacha pools
         run: php tests/gacha_pools_test.php
+      - name: Music gacha request ids
+        run: php tests/music_gacha_test.php
       - name: Match stream
         run: php tests/match_test.php
       - name: Full match E2E
