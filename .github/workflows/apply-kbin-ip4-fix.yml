@@ -14,14 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
       - name: Patch codec
         run: python3 tools/patch_kbin_ip4.py
-      - name: Commit patch
+      - name: Commit and rebase patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/Protocol/KBinXml.php
           git diff --cached --exit-code && exit 1 || true
           git commit -m "Fix KBin IPv4 type encoding"
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
