@@ -27,6 +27,13 @@ final class Dispatcher
             'keep_alive' => $this->xml(),
             'client_state_read' => $this->clientStateRead($form),
             'client_state_write' => $this->clientStateWrite($form),
+            'entry_game' => $this->entryGame($form),
+            'end_game', 'kiken_game' => $this->endGame($form),
+            'end_show' => $this->endShow($form),
+            'chk_tabooword' => $this->xml('<result>0</result>'),
+            'mission_date', 'present_done', 'competition_entry', 'item_gain_log',
+            'item_consume_log', 'notice_done', 'set_favorite_character', 'odekake_done',
+            'player_record', 'get_haifu_list', 'get_jongstone_info', 'get_mg' => $this->xml(),
             default => $this->xml(),
         };
     }
@@ -133,6 +140,49 @@ final class Dispatcher
         return $this->xml();
     }
 
+    private function entryGame(array $form): string
+    {
+        $gmode = (int)($form['gmode'] ?? 1);
+        if (!isset(self::GMODE_TAKU[$gmode])) $gmode = 1;
+        $pcuid = (string)($form['pcuid'] ?? 'GUEST');
+        $old = $this->db->getMatch($pcuid);
+        $tid = (int)($old['tid'] ?? 0) + 1;
+        $session = $this->db->getSession($pcuid);
+        $profile = $session ? $this->db->getProfile((string)$session['refid']) : null;
+        $taku = self::GMODE_TAKU[$gmode];
+        $match = [
+            'gmode'=>$gmode,
+            'taku'=>$taku,
+            'seats'=>self::SEATS[$taku],
+            'tid'=>$tid,
+            'pindex'=>0,
+            'mid'=>(int)($profile['player_id'] ?? 1),
+            'name'=>(string)($profile['payload']['name'] ?? $profile['name'] ?? 'ゲスト'),
+            'state'=>'matching',
+            'next_sno'=>0,
+        ];
+        $this->db->saveMatch($pcuid, $match);
+        $url = rtrim($this->baseUrl(), '/') . '/aog/';
+        return $this->xml('<entry><gserv_id>1</gserv_id><tid>' . $tid . '</tid><pindex>0</pindex><next_sno>0</next_sno><last_cyoukou_num>3</last_cyoukou_num><cyoukou_num>3</cyoukou_num><ste_oya1_limit_time>15000</ste_oya1_limit_time><ste_limit_time>10000</ste_limit_time><ste_reechi1_limit_time>15000</ste_reechi1_limit_time><naki_limit_time>8000</naki_limit_time><agari_limit_time>10000</agari_limit_time><naki_choice_limit_time>8000</naki_choice_limit_time><reechi_choice_limit_time>8000</reechi_choice_limit_time><last_cyoukou_limit_time>30000</last_cyoukou_limit_time><last_time>30000</last_time><gserv_url>' . $this->x($url) . '</gserv_url><pay_mode>0</pay_mode><gmode>' . $gmode . '</gmode></entry>');
+    }
+
+    private function endGame(array $form): string
+    {
+        $pcuid = (string)($form['pcuid'] ?? 'GUEST');
+        $m = $this->db->getMatch($pcuid) ?? [];
+        $m['state'] = 'game_end';
+        $this->db->saveMatch($pcuid, $m);
+        return $this->xml('<mgresult><result>0</result></mgresult>');
+    }
+
+    private function endShow(array $form): string
+    {
+        $voltage = (int)($form['voltage'] ?? 0);
+        $contribute = (int)($form['contribute_percent'] ?? 100);
+        $bonus = (int)($form['bonus'] ?? 0);
+        return $this->xml('<showresult><voltage>' . $voltage . '</voltage><contribute_percent>' . $contribute . '</contribute_percent><card_effect_percent>0</card_effect_percent><item_effect_percent>0</item_effect_percent><bonus>' . $bonus . '</bonus><get_point>' . max(0, intdiv($voltage,10)) . '</get_point></showresult>');
+    }
+
     private function playmodeXml(): string
     {
         $s = '<playmode_list>';
@@ -158,6 +208,12 @@ final class Dispatcher
     private function xml(string $inner = ''): string
     {
         return '<?xml version="1.0" encoding="UTF-8"?><response>' . $inner . '</response>';
+    }
+
+    private function baseUrl(): string
+    {
+        $https = ($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off';
+        return ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
     }
 
     private function x(string $s): string
