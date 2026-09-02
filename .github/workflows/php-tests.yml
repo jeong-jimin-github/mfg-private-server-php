@@ -19,6 +19,8 @@ jobs:
           extensions: dom, simplexml, pdo_sqlite, mbstring
       - name: Syntax check
         run: find src public tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Shared-hosting security config
+        run: php tests/shared_hosting_security_test.php
       - name: SQLite database
         run: php tests/database_test.php
       - name: Protocol
