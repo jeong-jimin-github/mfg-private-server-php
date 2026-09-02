@@ -68,15 +68,20 @@ $issued=ce_eamuse($base,'<call model="'.$model.'"><vfgcard method="getrefid" car
 ce_ok(isset($issued->vfgcard),'setup getrefid node');
 $refid=(string)($issued->vfgcard['refid']??$issued->vfgcard['dataid']??'');
 ce_ok($refid!=='','setup refid missing');
+ce_ok(!isset($issued->vfgcard['status']),'getrefid successful shape must omit status');
 $bound=ce_eamuse($base,'<call model="'.$model.'"><vfgcard method="bindmodel" refid="'.$refid.'"/></call>');
-ce_ok(isset($bound->vfgcard)&&(string)$bound->vfgcard['status']==='0','setup bindmodel');
+ce_ok(isset($bound->vfgcard),'setup bindmodel node');
+ce_ok(!isset($bound->vfgcard['status'])&&(string)$bound->vfgcard['dataid']===$refid,'setup bindmodel minimal success shape');
 
 // Captured real-client card-entry order (notes/progress.md in the Python
 // reference): inquire -> update_refer -> authpass, then the AOG load chain.
 $inquire=ce_eamuse($base,'<call model="'.$model.'"><vfgcard method="inquire" cardid="'.$cardId.'" cardtype="1"/></call>');
-ce_ok(isset($inquire->vfgcard)&&(string)$inquire->vfgcard['status']==='0','vfgcard.inquire');
+ce_ok(isset($inquire->vfgcard),'vfgcard.inquire node');
+ce_ok(!isset($inquire->vfgcard['status']),'successful inquire must omit status');
 ce_ok((string)$inquire->vfgcard['refid']===$refid&&(string)$inquire->vfgcard['dataid']===$refid,'inquire identity');
 ce_ok((string)$inquire->vfgcard['binded']==='1','inquire bound flag');
+ce_ok((string)$inquire->vfgcard['newflag']==='0','inquire newflag');
+ce_ok(ctype_digit((string)$inquire->vfgcard['lastupdate']),'inquire lastupdate');
 
 $refer=ce_eamuse($base,'<call model="'.$model.'"><vfgac method="update_refer"><refid __type="str">'.$refid.'</refid></vfgac></call>');
 ce_ok(isset($refer->vfgac)&&(string)$refer->vfgac['status']==='0','vfgac.update_refer');
@@ -96,11 +101,10 @@ ce_ok(isset($menu->menudata->mpdata),'get_menudata mpdata');
 ce_ok(isset($menu->menudata->battle_item_settings->basic_settings),'get_menudata basic_settings');
 ce_ok(isset($menu->menudata->battle_item_settings->playmode_settings),'get_menudata playmode_settings');
 
-// A fresh profile legitimately has no version_game state. What matters here is
-// that the one_kind probe returns a parser-safe success and does not redirect the
-// card flow back to title.
+// A fresh profile legitimately has no version_game state. The real client probes
+// this key before the rest of the card-entry load chain.
 $version=ce_aog($base,'client_state_read',['pcuid'=>$sid,'one_kind'=>'version_game']);
-ce_ok(!isset($version->state)||count($version->state)>=0,'version_game probe');
+ce_ok(!isset($version->state),'fresh version_game probe should be an empty success');
 
 $mission=ce_aog($base,'mission_date',['pcuid'=>$sid]);
 $missionKinds=[];foreach($mission->info_data as $n)$missionKinds[]=(string)$n['kind'];
