@@ -50,6 +50,21 @@ final class App
         $form = is_array($form) ? $form : [];
         $name = trim(substr($path, strlen('/aog')), '/');
         if ($name === '') $name = trim((string)($_GET['f'] ?? ''), '/');
+
+        // The managed Reconnect request is not a normal /aog/<api> POST. It
+        // uses /aog/reconnect/<ver>/<session>/<webid>/, so treating the whole
+        // suffix as an API name makes it fall through to a generic success and
+        // loses the saved match. The Python reference notes this exact routing
+        // gap. Normalize only this known path-shaped endpoint and expose its
+        // segments as form fields while preserving explicit body values.
+        if (str_starts_with($name, 'reconnect/')) {
+            $parts = array_values(array_filter(explode('/', $name), static fn(string $v): bool => $v !== ''));
+            $name = 'reconnect';
+            if (!isset($form['version']) && isset($parts[1])) $form['version'] = rawurldecode($parts[1]);
+            if (!isset($form['pcuid']) && isset($parts[2])) $form['pcuid'] = rawurldecode($parts[2]);
+            if (!isset($form['webid']) && isset($parts[3])) $form['webid'] = rawurldecode($parts[3]);
+        }
+
         $captureName='aog_'.($name!==''?$name:'root');
         $pairs=[];
         foreach($form as $k=>$v){
