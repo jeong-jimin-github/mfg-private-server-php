@@ -78,7 +78,7 @@ PHP 8.x port of `jeong-jimin-github/mfg-private-server` for shared-hosting deplo
 - pickup preview recursion guards and N/R/SR/UR pool safety checks
 - reach-song pools for MusicHiyori / MusicSen / MusicYao / MusicTenshi / MusicMusashi
 - `VFG_EVENT_TAKU=off|min|all` event-table flag selection with the original three-panel safety budget
-- all Python `GAME_HANDLERS` names covered by AOG route smoke tests
+- all Python `GAME_HANDLERS` names covered both directly and through the real HTTP front controller
 
 ### Mahjong engine
 
@@ -142,7 +142,7 @@ chat and gacha transactions survive independent PHP requests.
 
 GitHub Actions runs the main regression suite on PHP 8.1, 8.2 and 8.3, a real
 MySQL 8 persistence job, a real `php -S` HTTP transport job, and a PHP 8.2
-all-game-mode soak job.
+all-game-mode / multi-seed soak job.
 
 The suite covers protocol/kbin, cardmng/eacoin, e-Amusement bootstrap, vfglog,
 AOG parser contracts, event flags, mgresult, Mahjong scoring/rules, CPU behavior,
@@ -151,18 +151,28 @@ gacha crash-safety, every AOG route and full matches.
 `tests/match_e2e_test.php` mirrors the Python `test_match_e2e.py` client loop:
 `entry_game -> gget/gpost -> KYOKUEND -> end_game` across the seven reference
 modes. `tests/all_modes_soak_test.php` extends the same flow through all 23
-supported game modes; the current deterministic CI run completes 184 kyoku over
-2,830 request/response loops.
+supported game modes and also supports selectable modes/seeds. The reference
+all-mode seed completes 184 kyoku over 2,830 request/response loops. Three
+additional seed bases run representative 2P/3P/4P and event modes (18 more full
+matches), completing another 130 kyoku and 2,403 loops. Together the checked
+soak set is 41 complete matches, 314 kyoku and 5,233 client loops.
 
 `tests/app_transport_e2e_test.php` exercises the in-process App stack, while
 `tests/http_transport_client.php` sends the real binary RC4 + LZ77 + KBin wire
-format through a live `php -S` socket and also checks card quarantine, PASELI and
-AOG routing.
+format through a live `php -S` socket and checks card quarantine, PASELI,
+sticker/state persistence, and all 45 AOG routes through the public HTTP entry
+point.
+
+Shared-hosting configuration is also regression-tested. When the project root
+itself is exposed as the document root, `.htaccess` denies direct access to
+`src/`, `data/`, `tests/`, `.github/`, local DB/config files and repository
+metadata before the front-controller rewrite runs.
 
 Key tests include:
 
 ```bash
 php tests/database_test.php
+php tests/shared_hosting_security_test.php
 php tests/protocol_test.php
 php tests/kbin_test.php
 php tests/app_transport_e2e_test.php
@@ -187,17 +197,18 @@ php tests/aog_routes_test.php
 
 ## Remaining parity work
 
-The Python server remains the reference implementation. Missing top-level routes
-are no longer the main issue; remaining work is verification against the actual
-arcade client and wider randomized coverage:
+The Python server remains the reference implementation. Missing top-level routes,
+deterministic full matches, representative multi-seed matches, real HTTP routing
+and database request persistence now all have automated PHP coverage. The
+remaining work requires evidence from the actual arcade client rather than more
+synthetic server-only tests:
 
-- response-by-response comparison against captured real-client requests, especially binary kbin metadata/type details
-- multi-seed randomized match soak/fuzz coverage beyond the deterministic all-23-mode suite
-- real arcade-client confirmation for fields and timing behavior not exercised by automated fixtures
+- response-by-response comparison against captured real-client requests and responses, especially binary kbin attribute/type metadata
+- real arcade-client confirmation for fields, request ordering and timing behavior that synthetic fixtures cannot reproduce
 
 ## Shared hosting
 
 Point the web root at `public/` when possible. If the host requires the project
-itself to live in the public directory, keep `src/`, `data/` and local config
-protected from direct HTTP access and route requests to `public/index.php` with
-the supplied `.htaccess`.
+itself to live in the public directory, the supplied root `.htaccess` denies
+runtime data, source, tests and local configuration before routing application
+requests to `index.php`.
