@@ -73,4 +73,5 @@ jobs:
           git add src/Aog/Dispatcher.php src/Aog/MiscDispatcher.php
           git diff --cached --quiet && exit 0
           git commit -m 'Match original AOG boot and matching contracts'
+          git pull --rebase origin main
           git push
