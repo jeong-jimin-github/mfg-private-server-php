@@ -69,6 +69,8 @@ jobs:
         run: php tests/gacha_pools_test.php
       - name: Match stream
         run: php tests/match_test.php
+      - name: Full match E2E
+        run: php tests/match_e2e_test.php
       - name: Calls and wins
         run: php tests/calls_test.php
       - name: Features
