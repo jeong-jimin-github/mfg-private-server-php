@@ -62,7 +62,9 @@ foreach($routes as $route){
     libxml_use_internal_errors(true);
     $root=simplexml_load_string($xml);
     if($root===false)throw new RuntimeException("$route invalid XML: $xml");
+    if($root->getName()!=='root')throw new RuntimeException("$route wrong AOG root: ".$root->getName());
+    if(!isset($root->serv_st->code)||(string)$root->serv_st->code!=='0')throw new RuntimeException("$route missing serv_st/code=0");
 }
 
 @unlink($dbFile);@unlink($dbFile.'-wal');@unlink($dbFile.'-shm');
-echo 'AOG routes OK: '.count($routes)."\n";
+echo 'AOG routes OK: '.count($routes)." with root/serv_st parity\n";
