@@ -25,6 +25,8 @@ jobs:
         run: php tests/protocol_test.php
       - name: KBin
         run: php tests/kbin_test.php
+      - name: App RC4/LZ77/KBin E2E
+        run: php tests/app_transport_e2e_test.php
       - name: Cardmng and eacoin parity
         run: php tests/cardmng_eacoin_test.php
       - name: e-Amusement bootstrap parity
