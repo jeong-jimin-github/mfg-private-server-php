@@ -7,6 +7,7 @@ spl_autoload_register(static function(string $class):void{
 });
 
 use Mfg\Eamuse\Dispatcher;
+use Mfg\Protocol\KBinXml;
 use Mfg\Storage\Database;
 
 function eb_ok(bool $v,string $m):void{if(!$v)throw new RuntimeException($m);}
@@ -29,6 +30,24 @@ eb_ok((string)$f->portfw->globalport==='8080'&&(string)$f->portfw->privateport==
 eb_ok((string)$f->public->flag==='1'&&(string)$f->public->name==='LOCAL TEST','public');
 eb_ok((string)$f->share->eacoin->supplylimit==='100000','eacoin supply');
 foreach(['eapass','arcadefan','konaminetdx','konamiid','eagate'] as $tag)eb_ok((string)$f->share->url->{$tag}==='http://127.0.0.1:8080','url '.$tag);
+
+// Shared hosting normally reaches App through a hostname, not a literal IPv4.
+// KBin ip4 cannot encode that hostname. A non-resolving reserved domain must
+// therefore fall back to a valid IPv4 while all public service URLs keep the
+// original hostname/HTTPS origin.
+$domainBase='https://facility-host.invalid';
+$domainDispatcher=new Dispatcher(new Database('sqlite::memory:'),$domainBase);
+$domainXml=$domainDispatcher->dispatch($model,'facility','get',new SimpleXMLElement('<call/>'));
+$domain=new SimpleXMLElement($domainXml);$df=$domain->facility;
+$domainIp=(string)$df->portfw->globalip;
+eb_ok(filter_var($domainIp,FILTER_VALIDATE_IP,FILTER_FLAG_IPV4)!==false,'domain facility globalip must be IPv4');
+eb_ok((string)$df->portfw->globalip['__type']==='ip4','domain facility globalip type');
+eb_ok((string)$df->portfw->globalport==='443'&&(string)$df->portfw->privateport==='443','domain HTTPS ports');
+foreach(['eapass','arcadefan','konaminetdx','konamiid','eagate'] as $tag)eb_ok((string)$df->share->url->{$tag}===$domainBase,'domain URL '.$tag);
+$domainBin=KBinXml::encode($domainXml,'UTF-8',true);
+$domainRound=KBinXml::decode($domainBin);
+eb_ok(str_contains($domainRound['xml'],'__type="ip4"'),'domain facility KBin lost ip4 type');
+eb_ok(str_contains($domainRound['xml'],$domainIp),'domain facility KBin lost IPv4 value');
 
 $xml=$d->dispatch($model,'vfgac','service_list',new SimpleXMLElement('<call/>'));
 $r=new SimpleXMLElement($xml);$v=$r->vfgac;
