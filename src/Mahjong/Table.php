@@ -95,9 +95,9 @@ final class Table
         if(!empty($this->s['finished']))return;$seat=(int)$this->s['human'];
         if($kind===self::S_SUTE_PAI){$idx=Mahjong::paiToIdx($pai);if($idx<0||!in_array($idx,$this->s['hands'][$pindex]??[],true))$idx=(int)($this->s['drawn'][$pindex]??($this->s['hands'][$pindex][count($this->s['hands'][$pindex])-1]??-1));if($idx>=0)$this->discard($pindex,$idx,$reach!==0,$tsumogiri!==0);return;}
         if($kind===self::S_TSUMO_AGARI){$this->applyTsumo($seat);return;}
-        if($kind===self::S_RON_AGARI){$ctx=$this->s['call_ctx'];if(is_array($ctx))$this->applyRon($seat,(int)$ctx['discarder'],(int)$ctx['tile'],!empty($ctx['chankan']));return;}
+        if($kind===self::S_RON_AGARI){$ctx=$this->s['call_ctx'];if(is_array($ctx)){$from=(int)$ctx['discarder'];$tile=(int)$ctx['tile'];$chankan=!empty($ctx['chankan']);$winners=$this->ronCandidates($from,$tile,$chankan,true);if(in_array($seat,$winners,true))$this->applyRonMany($winners,$from,$tile,$chankan);}return;}
         if($kind===self::S_KYUSYUKYUHAI){$this->s['pending_choices']=null;if($this->kyuushuOk($seat))$this->ryuukyoku(true);return;}
-        if($kind===self::S_NAKINASHI){$ctx=$this->s['call_ctx'];$this->s['call_ctx']=null;$this->s['state']='discard';if(is_array($ctx)){$this->s['temp_furiten'][$seat]=!empty($ctx['ron']);if(!empty($ctx['chankan']))$this->beginTurn((int)$ctx['discarder'],true);else$this->cpuCalls((int)$ctx['discarder'],(int)$ctx['tile']);}return;}
+        if($kind===self::S_NAKINASHI){$ctx=$this->s['call_ctx'];$this->s['call_ctx']=null;$this->s['state']='discard';if(is_array($ctx)){$this->s['temp_furiten'][$seat]=!empty($ctx['ron']);$from=(int)$ctx['discarder'];$tile=(int)$ctx['tile'];if(!empty($ctx['chankan'])){$cpu=$this->ronCandidates($from,$tile,true,false);if($cpu)$this->applyRonMany($cpu,$from,$tile,true);else$this->beginTurn($from,true);}else$this->cpuCalls($from,$tile);}return;}
         if(in_array($kind,[self::S_PON,self::S_CHI,self::S_MINKAN],true)){$ctx=$this->s['call_ctx'];if(!is_array($ctx))return;$from=(int)$ctx['discarder'];$tile=(int)$ctx['tile'];$this->s['call_ctx']=null;if($kind===self::S_PON)$this->applyPon($seat,$from,$tile);elseif($kind===self::S_CHI)$this->applyChi($seat,$from,$tile,$tepaiId,$tepaiId2);else$this->applyMinkan($seat,$from,$tile);return;}
         if($kind===self::S_ANKAN){$idx=Mahjong::paiToIdx($pai);if($idx>=0)$this->applyAnkan($seat,$idx);return;}
         if($kind===self::S_KAKAN){$idx=Mahjong::paiToIdx($pai);if($idx>=0)$this->applyKakan($seat,$idx);return;}
@@ -157,10 +157,16 @@ final class Table
         $this->cell(self::K_SUTECHOICES,$inner,[(int)$this->s['human']]);$this->s['call_ctx']=['discarder'=>$discarder,'tile'=>$tile,'ron'=>$ron,'chankan'=>$chankan];$this->s['state']='call';
     }
 
+    /** @return list<int> */
+    private function ronCandidates(int $discarder,int $tile,bool $chankan=false,bool $includeHuman=true):array
+    {
+        $out=[];$seats=(int)$this->s['seats'];$human=(int)$this->s['human'];for($i=1;$i<$seats;$i++){$s=($discarder+$i)%$seats;if(!$includeHuman&&$s===$human)continue;if($this->winResult($s,$tile,false,$chankan)!==null)$out[]=$s;}return $out;
+    }
+
     private function cpuCalls(int $discarder,int $tile):void
     {
-        $seats=(int)$this->s['seats'];for($i=1;$i<$seats;$i++){$s=($discarder+$i)%$seats;if($s===(int)$this->s['human'])continue;if($this->winResult($s,$tile,false)!==null){$this->applyRon($s,$discarder,$tile);return;}}
-        for($i=1;$i<$seats;$i++){$s=($discarder+$i)%$seats;if($s===(int)$this->s['human']||!empty($this->s['riichi'][$s]))continue;if($this->countTile($s,$tile)>=3&&(int)$this->s['kan_count']<4&&!empty($this->s['wall'])&&CpuAi::wantsPon($this->s,$s,$tile)){$this->applyMinkan($s,$discarder,$tile);return;}if($this->countTile($s,$tile)>=2&&CpuAi::wantsPon($this->s,$s,$tile)){$this->applyPon($s,$discarder,$tile);return;}}
+        $winners=$this->ronCandidates($discarder,$tile,false,false);if($winners){$this->applyRonMany($winners,$discarder,$tile);return;}
+        $seats=(int)$this->s['seats'];for($i=1;$i<$seats;$i++){$s=($discarder+$i)%$seats;if($s===(int)$this->s['human']||!empty($this->s['riichi'][$s]))continue;if($this->countTile($s,$tile)>=3&&(int)$this->s['kan_count']<4&&!empty($this->s['wall'])&&CpuAi::wantsPon($this->s,$s,$tile)){$this->applyMinkan($s,$discarder,$tile);return;}if($this->countTile($s,$tile)>=2&&CpuAi::wantsPon($this->s,$s,$tile)){$this->applyPon($s,$discarder,$tile);return;}}
         $next=$this->nextSeat($discarder);if($next!==(int)$this->s['human']&&empty($this->s['riichi'][$next])){$pick=CpuAi::pickChi($this->s,$next,$tile,$this->chiOptions($next,$tile));if($pick!==null){$this->applyChiByTiles($next,$discarder,$tile,$pick);return;}}$this->beginTurn($next);
     }
 
@@ -182,7 +188,7 @@ final class Table
 
     private function applyKakan(int $seat,int $tile):void
     {
-        if($this->countTile($seat,$tile)<1)return;foreach($this->s['melds'][$seat] as &$m){if(($m['kind']??'')!=='pon'||($m['tiles'][0]??-1)!==$tile)continue;$this->removeTile($seat,$tile);$m['kind']='kakan';$m['tiles']=[$tile,$tile,$tile,$tile];$this->s['any_call']=true;$this->breakIppatsu();$this->s['kan_count']++;$this->s['dora_open']=min(5,(int)$this->s['dora_open']+1);$this->cell(self::K_KAKAN,'<pindex>'.$seat.'</pindex><pai>'.Mahjong::idxToPai($tile).'</pai>');unset($m);$seats=(int)$this->s['seats'];for($i=1;$i<$seats;$i++){$s=($seat+$i)%$seats;$res=$this->winResult($s,$tile,false,true);if($res===null)continue;if($s===(int)$this->s['human']){$this->offerSuteChoices($seat,$tile,true,false,false,false,true);return;}$this->applyRon($s,$seat,$tile,true);return;}$this->beginTurn($seat,true);return;}unset($m);
+        if($this->countTile($seat,$tile)<1)return;foreach($this->s['melds'][$seat] as &$m){if(($m['kind']??'')!=='pon'||($m['tiles'][0]??-1)!==$tile)continue;$this->removeTile($seat,$tile);$m['kind']='kakan';$m['tiles']=[$tile,$tile,$tile,$tile];$this->s['any_call']=true;$this->breakIppatsu();$this->s['kan_count']++;$this->s['dora_open']=min(5,(int)$this->s['dora_open']+1);$this->cell(self::K_KAKAN,'<pindex>'.$seat.'</pindex><pai>'.Mahjong::idxToPai($tile).'</pai>');unset($m);$winners=$this->ronCandidates($seat,$tile,true,true);if($winners){if(in_array((int)$this->s['human'],$winners,true)){$this->offerSuteChoices($seat,$tile,true,false,false,false,true);return;}$this->applyRonMany($winners,$seat,$tile,true);return;}$this->beginTurn($seat,true);return;}unset($m);
     }
 
     private function applyTsumo(int $seat):void
@@ -194,9 +200,18 @@ final class Table
     }
 
     private function applyRon(int $seat,int $from,int $tile,bool $chankan=false):void
+    {$this->applyRonMany([$seat],$from,$tile,$chankan);}
+
+    /** @param list<int> $winners */
+    private function applyRonMany(array $winners,int $from,int $tile,bool $chankan=false):void
     {
-        $res=$this->winResult($seat,$tile,false,$chankan);if($res===null)return;$before=array_values(array_pad(array_map('intval',$this->s['scores']),4,0));$yaku=[0,0,0,0];$kyo=[0,0,0,0];$fu=[0,0,0,0];$pay=ScoreMath::payments((int)$this->s['taku'],(int)$res['rank'],(int)$res['fu'],$seat===$this->oya(),false);$total=(int)$pay['total'];$yaku[$seat]+=$total;$yaku[$from]-=$total;$fu[$seat]+=300*(int)$this->s['honba'];$fu[$from]-=300*(int)$this->s['honba'];$kyo[$seat]+=1000*(int)$this->s['kyotaku'];for($i=0;$i<4;$i++)$this->s['scores'][$i]=$before[$i]+$yaku[$i]+$kyo[$i]+$fu[$i];$this->s['kyotaku']=0;
-        $inner='<furikomi_pindex>'.$from.'</furikomi_pindex>'.$this->ints('ron_flg',array_map(fn($i)=>$i===$seat?1:0,range(0,3))).'<dora_open>'.(int)$this->s['dora_open'].'</dora_open>'.$this->ints('dora',$this->pais($this->s['dora_ind'])).$this->ints('ura_dora',$this->pais($this->s['ura_ind']));for($i=0;$i<4;$i++){if($i===$seat){$hand=$this->s['hands'][$i];$hand[]=$tile;sort($hand);$inner.=ResultXml::yaku('yaku'.$i,$res,$tile,$hand);}else$inner.=ResultXml::yaku('yaku'.$i,null,$tile,array_fill(0,13,0));}$inner.=ResultXml::calcScores($before,$yaku,$kyo,$fu);$this->cell(self::K_RON,$inner);$this->finishKyoku([$seat],false);
+        $results=[];$valid=[];foreach($winners as $seat){$seat=(int)$seat;$res=$this->winResult($seat,$tile,false,$chankan);if($res===null)continue;$results[$seat]=$res;$valid[]=$seat;}if(!$valid)return;
+        $before=array_values(array_pad(array_map('intval',$this->s['scores']),4,0));$yaku=[0,0,0,0];$kyo=[0,0,0,0];$fu=[0,0,0,0];$first=true;
+        foreach($valid as $seat){$res=$results[$seat];$pay=ScoreMath::payments((int)$this->s['taku'],(int)$res['rank'],(int)$res['fu'],$seat===$this->oya(),false);$total=(int)$pay['total'];$yaku[$seat]+=$total;$yaku[$from]-=$total;$fu[$seat]+=300*(int)$this->s['honba'];$fu[$from]-=300*(int)$this->s['honba'];if($first){$kyo[$seat]+=1000*(int)$this->s['kyotaku'];$first=false;}}
+        for($i=0;$i<4;$i++)$this->s['scores'][$i]=$before[$i]+$yaku[$i]+$kyo[$i]+$fu[$i];$this->s['kyotaku']=0;
+        $inner='<furikomi_pindex>'.$from.'</furikomi_pindex>'.$this->ints('ron_flg',array_map(fn($i)=>in_array($i,$valid,true)?1:0,range(0,3))).'<dora_open>'.(int)$this->s['dora_open'].'</dora_open>'.$this->ints('dora',$this->pais($this->s['dora_ind'])).$this->ints('ura_dora',$this->pais($this->s['ura_ind']));
+        for($i=0;$i<4;$i++){if(isset($results[$i])){$hand=$this->s['hands'][$i];$hand[]=$tile;sort($hand);$inner.=ResultXml::yaku('yaku'.$i,$results[$i],$tile,$hand);}else$inner.=ResultXml::yaku('yaku'.$i,null,$tile,array_fill(0,13,0));}
+        $inner.=ResultXml::calcScores($before,$yaku,$kyo,$fu);$this->cell(self::K_RON,$inner);$this->finishKyoku($valid,false);
     }
 
     /** @return array<string,mixed>|null */
