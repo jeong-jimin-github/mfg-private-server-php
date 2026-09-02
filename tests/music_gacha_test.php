@@ -67,6 +67,12 @@ try{
     $again=mg_play($f,$reqB);
     mg_ok(in_array($again,$fallback,true),'consumed request did not fall back to series 91');
 
+    // Python's MUSIC_GACHA_POOL contains only Music series. Reserving a normal
+    // gacha id must therefore also fall back to series 91 on playback.
+    $normalReq=mg_reserve($f,0);
+    $normalItem=mg_play($f,$normalReq);
+    mg_ok(in_array($normalItem,$fallback,true),'non-music reservation returned a non-song item');
+
     // Persistence across dispatcher instances models independent PHP-FPM requests.
     $reqPersist=mg_reserve($f,$seriesB);
     $f2=new FeatureDispatcher(new Database($dbPath));
