@@ -31,3 +31,5 @@ jobs:
           git add src/Eamuse/Dispatcher.php tests/vfglog_test.php
           git commit -m 'Implement vfglog client diagnostics'
           git push
+
+# retry: 2
