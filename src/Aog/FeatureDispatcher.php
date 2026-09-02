@@ -12,44 +12,6 @@ final class FeatureDispatcher
     private const DOJO_STOCK_MAX = 3;
     private const DOJO_LESSON_SECONDS = 300;
 
-    private const GACHA_SERIES = [
-        [0,'Normal',0,'Normal'],[1,'NormalTicket',1,'Normal'],[25,'UnlockClear',0,'Unlock'],
-        [44,'UnlockIyo',0,'Unlock'],[56,'UnlockGrimAroe',0,'Unlock'],[63,'UnlockCocoa',0,'Unlock'],
-        [74,'UnlockDia',0,'Unlock'],[101,'UnlockDoubriel',0,'Unlock'],[125,'UnlockIppatsu',0,'Unlock'],
-        [135,'UnlockShiroe',0,'Unlock'],[91,'MusicHiyori',0,'Music'],[92,'MusicSen',0,'Music'],
-        [107,'MusicYao',0,'Music'],[114,'MusicTenshi',0,'Music'],[132,'MusicMusashi',0,'Music'],
-        [133,'LimitedCharaReturns',0,'Limited'],[124,'PickupIppatsu',0,'Pickup'],
-        [128,'PickupMizugiReturns4',0,'Pickup'],[129,'PickupUniformDia',0,'Pickup'],
-        [130,'PickupYukataToytoy2',0,'Pickup'],[131,'PickupUniformDoubriel',0,'Pickup'],
-        [134,'PickupShiroe',0,'Pickup'],[136,'PickupXmasGrimAroe',0,'Pickup'],
-        [137,'PickupMarchingIchiko',0,'Pickup'],[138,'PickupKimonoClear',0,'Pickup'],
-        [139,'PickupBomberPine2',0,'Pickup'],[140,'PickupLillyIppatsu',0,'Pickup'],
-    ];
-
-    private const SAFE_POOL = [
-        'OID_01NakiN01','OID_02NakiN01','OID_03NakiN01','OID_04NakiN01',
-        'OID_01AgariR01','OID_02AgariR01','OID_03ReachR01','OID_04ReachR01',
-        'OID_01AgariSR01','OID_02AgariSR01','OID_03AgariSR01','OID_04AgariSR01',
-        'OID_01AgariUR01','OID_02AgariUR01','OID_03AgariUR01','OID_04AgariUR01',
-    ];
-
-    private const MUSIC_POOL = [
-        91=>['OID_ReachBgm148','OID_ReachBgm149','OID_ReachBgm150','OID_ReachBgm151'],
-        92=>['OID_ReachBgm152','OID_ReachBgm153','OID_ReachBgm154','OID_ReachBgm155'],
-        107=>['OID_ReachBgm160','OID_ReachBgm161','OID_ReachBgm162','OID_ReachBgm163'],
-        114=>['OID_ReachBgm164','OID_ReachBgm165','OID_ReachBgm166','OID_ReachBgm167'],
-        132=>['OID_ReachBgm172','OID_ReachBgm173','OID_ReachBgm174','OID_ReachBgm175'],
-    ];
-
-    private const UNLOCKS = [
-        25=>'OID_12AgariSR01',44=>'OID_13AgariSR01',56=>'OID_14AgariSR01',63=>'OID_15AgariSR01',
-        74=>'OID_16AgariSR01',101=>'OID_17AgariSR01',125=>'OID_18AgariSR01',135=>'OID_19AgariSR01',
-    ];
-
-    private const PICKUP_CHARA = [
-        124=>'Chara18',129=>'Chara16',131=>'Chara17',134=>'Chara19',136=>'Chara14',137=>'Chara01',138=>'Chara12',139=>'Chara01',140=>'Chara18',
-    ];
-
     public function __construct(private Database $db) {}
 
     public function dispatch(string $name,array $form): ?string
@@ -100,15 +62,14 @@ final class FeatureDispatcher
     private function gachaInfo(): string
     {
         $body='<gacha_schedule>';
-        foreach(self::GACHA_SERIES as [$id,$label,$ticket,$stype]) {
-            $pool=self::MUSIC_POOL[$id]??self::SAFE_POOL;
+        foreach(GachaPools::series() as $sid=>$entry) {
+            $id=(int)$sid;$label=(string)($entry['name']??('Series'.$id));$stype=(string)($entry['type']??'Normal');$ticket=$id===1?1:0;
             $body.='<info><id>'.$id.'</id><label>'.$this->x($label).'</label><ticket_nr>'.$ticket.'</ticket_nr><now_active>1</now_active><series_type>'.$this->x($stype).'</series_type><items>';
-            foreach($pool as $oid)$body.='<item>'.$this->x($oid).'</item>';
+            foreach(GachaPools::poolForSeries($id) as $oid)$body.='<item>'.$this->x($oid).'</item>';
             $body.='</items><pickup_charas>';
-            if(isset(self::PICKUP_CHARA[$id])) $body.='<chara>'.$this->x(self::PICKUP_CHARA[$id]).'</chara>';
-            elseif($stype==='Pickup' && !isset(self::UNLOCKS[$id])) $body.='<chara>Chara01</chara>';
+            foreach(GachaPools::pickupCharas($id) as $chara)$body.='<chara>'.$this->x($chara).'</chara>';
             $body.='</pickup_charas><custom_pickup_items>';
-            if(isset(self::UNLOCKS[$id]))$body.='<item>'.$this->x(self::UNLOCKS[$id]).'</item>';
+            foreach(GachaPools::customPickupItems($id) as $oid)$body.='<item>'.$this->x($oid).'</item>';
             $body.='</custom_pickup_items><exchange_items></exchange_items><start_date>2020/01/01 00:00:00</start_date><end_date>2099/12/31 23:59:59</end_date></info>';
         }
         return $this->xml($body.'</gacha_schedule>');
@@ -116,9 +77,11 @@ final class FeatureDispatcher
 
     private function reqDrawGacha(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['series_id']??$form['gacha_id']??0);$count=max(1,min(10,(int)($form['count']??1)));$pool=self::MUSIC_POOL[$series]??self::SAFE_POOL;$draw=[];
+        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['series_id']??$form['gacha_id']??0);$count=max(1,min(10,(int)($form['count']??1)));
+        $pool=GachaPools::poolForSeries($series);if(!$pool)$pool=GachaPools::poolForSeries(0);$draw=[];
         for($i=0;$i<$count;$i++)$draw[]=$pool[random_int(0,count($pool)-1)];
-        if(!isset(self::MUSIC_POOL[$series])&&isset(self::UNLOCKS[$series])&&random_int(1,100)<=10)$draw[0]=self::UNLOCKS[$series];
+        $entry=GachaPools::seriesEntry($series);$custom=GachaPools::customPickupItems($series);
+        if(($entry['type']??'')==='Unlock'&&$custom&&random_int(1,100)<=10)$draw[0]=$custom[0];
         $token=bin2hex(random_bytes(8));$this->db->setKv('gacha',$pcuid,['token'=>$token,'series'=>$series,'items'=>$draw,'time'=>time()]);
         return $this->xml('<transaction_info><transaction_id>'.$token.'</transaction_id></transaction_info>');
     }
@@ -132,11 +95,14 @@ final class FeatureDispatcher
 
     private function musicReserve(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['gacha_id']??$form['series_id']??91);$req=random_int(1001,PHP_INT_MAX);$this->db->setKv('music_gacha',$pcuid,['request_id'=>$req,'series'=>$series,'time'=>time()]);return $this->xml('<gacha_reserve><is_success>1</is_success><request_id>'.$req.'</request_id></gacha_reserve>');
+        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['gacha_id']??$form['series_id']??91);$entry=GachaPools::seriesEntry($series);
+        if(($entry['type']??'')!=='Music')$series=91;
+        $req=random_int(1001,PHP_INT_MAX);$this->db->setKv('music_gacha',$pcuid,['request_id'=>$req,'series'=>$series,'time'=>time()]);return $this->xml('<gacha_reserve><is_success>1</is_success><request_id>'.$req.'</request_id></gacha_reserve>');
     }
+
     private function musicPlay(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('music_gacha',$pcuid,['series'=>91]);$series=(int)($row['series']??91);$pool=self::MUSIC_POOL[$series]??self::MUSIC_POOL[91];$oid=$pool[random_int(0,count($pool)-1)];$this->db->deleteKv('music_gacha',$pcuid);return $this->xml('<gacha_result><is_success>1</is_success><gain_items><item>'.$this->x($oid).'</item></gain_items><gift>2</gift><fight_spirits></fight_spirits></gacha_result>');
+        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('music_gacha',$pcuid,['series'=>91]);$series=(int)($row['series']??91);$pool=GachaPools::poolForSeries($series);if(!$pool)$pool=GachaPools::poolForSeries(91);$oid=$pool[random_int(0,count($pool)-1)];$this->db->deleteKv('music_gacha',$pcuid);return $this->xml('<gacha_result><is_success>1</is_success><gain_items><item>'.$this->x($oid).'</item></gain_items><gift>2</gift><fight_spirits></fight_spirits></gacha_result>');
     }
 
     /** @return array{0:string,1:array<string,mixed>} */
