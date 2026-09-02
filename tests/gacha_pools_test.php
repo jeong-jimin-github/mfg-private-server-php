@@ -80,5 +80,18 @@ gpok($res!==false&&strlen((string)$res->transaction_info->transaction_id)===16,'
 $result=simplexml_load_string((string)$f->dispatch('get_gacha_result',['pcuid'=>'x','transaction_id'=>(string)$res->transaction_info->transaction_id,'times'=>'5']));
 gpok($result!==false&&count($result->lottery_result->data)===5,'times=5 lottery result count');
 
+// The Python reference does not bind result row count to req_draw_gacha. It
+// reads get_gacha_result.times directly and does not validate transaction_id.
+$res2=simplexml_load_string((string)$f->dispatch('req_draw_gacha',['pcuid'=>'x','gacha_name'=>'Normal','times'=>'2']));
+gpok($res2!==false&&strlen((string)$res2->transaction_info->transaction_id)===16,'second gacha transaction');
+$override=simplexml_load_string((string)$f->dispatch('get_gacha_result',['pcuid'=>'x','transaction_id'=>(string)$res2->transaction_info->transaction_id,'times'=>'7']));
+gpok($override!==false&&count($override->lottery_result->data)===7,'get times must override req times');
+$noTxn=simplexml_load_string((string)$f->dispatch('get_gacha_result',['pcuid'=>'other','times'=>'3']));
+gpok($noTxn!==false&&count($noTxn->lottery_result->data)===3,'transaction id must not be required');
+$zero=simplexml_load_string((string)$f->dispatch('get_gacha_result',['times'=>'0']));
+gpok($zero!==false&&count($zero->lottery_result->data)===1,'times=0 must fall back to one result');
+$negative=simplexml_load_string((string)$f->dispatch('get_gacha_result',['times'=>'-5']));
+gpok($negative!==false&&count($negative->lottery_result->data)===1,'negative times must clamp to one result');
+
 putenv('VFG_GACHA_ALL');@unlink($tmp);
 echo "gacha pools/advertisement/crash-safety OK\n";
