@@ -29,6 +29,8 @@ jobs:
         run: php tests/kbin_test.php
       - name: App RC4/LZ77/KBin E2E
         run: php tests/app_transport_e2e_test.php
+      - name: Real-client capture pipeline
+        run: php tests/capture_test.php
       - name: Health endpoints
         run: php tests/health_test.php
       - name: Cardmng and eacoin parity
