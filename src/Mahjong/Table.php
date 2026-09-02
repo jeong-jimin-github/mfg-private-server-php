@@ -85,7 +85,15 @@ final class Table
         if($kind===self::S_SUTE_PAI){$idx=Mahjong::paiToIdx($pai);if($idx<0||!in_array($idx,$this->s['hands'][$pindex]??[],true))$idx=(int)($this->s['drawn'][$pindex]??($this->s['hands'][$pindex][count($this->s['hands'][$pindex])-1]??-1));if($idx>=0)$this->discard($pindex,$idx,$reach!==0,$tsumogiri!==0);return;}
         if($kind===self::S_TSUMO_AGARI){$this->applyTsumo($seat);return;}
         if($kind===self::S_RON_AGARI){$ctx=$this->s['call_ctx'];if(is_array($ctx))$this->applyRon($seat,(int)$ctx['discarder'],(int)$ctx['tile'],!empty($ctx['chankan']));return;}
-        if($kind===self::S_NAKINASHI){$ctx=$this->s['call_ctx'];$this->s['call_ctx']=null;$this->s['state']='discard';if(is_array($ctx)){$this->s['temp_furiten'][$seat]=!empty($ctx['ron']);$this->cpuCalls((int)$ctx['discarder'],(int)$ctx['tile']);}return;}
+        if($kind===self::S_NAKINASHI){
+            $ctx=$this->s['call_ctx'];$this->s['call_ctx']=null;$this->s['state']='discard';
+            if(is_array($ctx)){
+                $this->s['temp_furiten'][$seat]=!empty($ctx['ron']);
+                if(!empty($ctx['chankan']))$this->beginTurn((int)$ctx['discarder'],true);
+                else $this->cpuCalls((int)$ctx['discarder'],(int)$ctx['tile']);
+            }
+            return;
+        }
         if(in_array($kind,[self::S_PON,self::S_CHI,self::S_MINKAN],true)){$ctx=$this->s['call_ctx'];if(!is_array($ctx))return;$from=(int)$ctx['discarder'];$tile=(int)$ctx['tile'];$this->s['call_ctx']=null;if($kind===self::S_PON)$this->applyPon($seat,$from,$tile);elseif($kind===self::S_CHI)$this->applyChi($seat,$from,$tile,$tepaiId,$tepaiId2);else$this->applyMinkan($seat,$from,$tile);return;}
         if($kind===self::S_ANKAN){$idx=Mahjong::paiToIdx($pai);if($idx>=0)$this->applyAnkan($seat,$idx);return;}
         if($kind===self::S_KAKAN){$idx=Mahjong::paiToIdx($pai);if($idx>=0)$this->applyKakan($seat,$idx);return;}
@@ -183,7 +191,24 @@ final class Table
     {if($this->countTile($seat,$tile)<4)return;for($i=0;$i<4;$i++)$this->removeTile($seat,$tile);$this->s['melds'][$seat][]=['kind'=>'ankan','tiles'=>[$tile,$tile,$tile,$tile],'called'=>$tile,'from_seat'=>$seat];$this->s['any_call']=true;$this->breakIppatsu();$this->s['kan_count']++;$this->s['dora_open']=min(5,(int)$this->s['dora_open']+1);$this->cell(self::K_ANKAN,'<pindex>'.$seat.'</pindex><pai>'.Mahjong::idxToPai($tile).'</pai>');$this->beginTurn($seat,true);}
 
     private function applyKakan(int $seat,int $tile):void
-    {if($this->countTile($seat,$tile)<1)return;foreach($this->s['melds'][$seat] as &$m){if(($m['kind']??'')==='pon'&&($m['tiles'][0]??-1)===$tile){$this->removeTile($seat,$tile);$m['kind']='kakan';$m['tiles']=[$tile,$tile,$tile,$tile];$this->s['any_call']=true;$this->breakIppatsu();$this->s['kan_count']++;$this->s['dora_open']=min(5,(int)$this->s['dora_open']+1);$this->cell(self::K_KAKAN,'<pindex>'.$seat.'</pindex><pai>'.Mahjong::idxToPai($tile).'</pai>');$this->beginTurn($seat,true);break;}}unset($m);}
+    {
+        if($this->countTile($seat,$tile)<1)return;
+        foreach($this->s['melds'][$seat] as &$m){
+            if(($m['kind']??'')!=='pon'||($m['tiles'][0]??-1)!==$tile)continue;
+            $this->removeTile($seat,$tile);$m['kind']='kakan';$m['tiles']=[$tile,$tile,$tile,$tile];
+            $this->s['any_call']=true;$this->breakIppatsu();$this->s['kan_count']++;$this->s['dora_open']=min(5,(int)$this->s['dora_open']+1);
+            $this->cell(self::K_KAKAN,'<pindex>'.$seat.'</pindex><pai>'.Mahjong::idxToPai($tile).'</pai>');
+            unset($m);
+            $seats=(int)$this->s['seats'];
+            for($i=1;$i<$seats;$i++){
+                $s=($seat+$i)%$seats;$res=$this->winResult($s,$tile,false,true);if($res===null)continue;
+                if($s===(int)$this->s['human']){$this->offerSuteChoices($seat,$tile,true,false,false,false,true);return;}
+                $this->applyRon($s,$seat,$tile,true);return;
+            }
+            $this->beginTurn($seat,true);return;
+        }
+        unset($m);
+    }
 
     private function applyTsumo(int $seat):void
     {
