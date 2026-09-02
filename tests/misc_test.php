@@ -26,8 +26,14 @@ if(!str_contains((string)$xml,'<additional_mg>0</additional_mg>'))throw new Runt
 
 $d->dispatch('gchat',['tid'=>'9','mid'=>'1','pindex'=>'0','name'=>'ME','contents'=>'TableSticker001','param'=>'']);
 $xml=$d->dispatch('gchat',['tid'=>'9']);
-if(!str_contains((string)$xml,'TableSticker001'))throw new RuntimeException('chat persistence');
-if(!str_contains((string)$xml,'<last_idx>1</last_idx>'))throw new RuntimeException('chat index');
+$root=new SimpleXMLElement((string)$xml);$chat=$root->chat??null;
+if(!$chat instanceof SimpleXMLElement||count($chat->d)!==1)throw new RuntimeException('chat persistence');
+$row=$chat->d[0];
+if((int)$row['idx']!==1||(int)$row['mid']!==1||(int)$row['pindex']!==0||(int)$row['time']<=0)throw new RuntimeException('chat attributes');
+if((string)$row->name!=='ME'||(string)$row->contents!=='TableSticker001'||(string)$row->param!=='')throw new RuntimeException('chat payload');
+// The Python reference's _stamp_xml contract is <chat><d .../></chat>; there
+// is deliberately no legacy <last_idx> sibling. Cursoring is driven by d@idx.
+if(isset($root->last_idx))throw new RuntimeException('legacy last_idx must not be emitted');
 
 $xml=$d->dispatch('present_done',['done_ids'=>'10,11']);
 if(substr_count((string)$xml,'<success>1</success>')!==2)throw new RuntimeException('present_done contract');
