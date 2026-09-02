@@ -27,6 +27,8 @@ jobs:
         run: php tests/mahjong_test.php
       - name: Score math
         run: php tests/score_math_test.php
+      - name: Hand evaluator
+        run: php tests/hand_evaluator_test.php
       - name: Match stream
         run: php tests/match_test.php
       - name: Calls and wins
