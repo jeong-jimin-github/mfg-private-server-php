@@ -8,6 +8,10 @@ use Mfg\Storage\Database;
 
 final class MiscDispatcher
 {
+    private const CPU_STAMP_REPLIES = [
+        'TableSticker001','TableSticker002','TableSticker003','TableSticker004',
+    ];
+
     public function __construct(private Database $db) {}
 
     public function dispatch(string $name,array $form): ?string
@@ -49,7 +53,9 @@ final class MiscDispatcher
         $tid=max(1,(int)($form['tid']??1));
         $contents=(string)($form['contents']??'');
         if($contents!=='') {
-            (new StampStore($this->db))->post($tid,(int)($form['mid']??0),(int)($form['pindex']??0),(string)($form['name']??''),$contents,(string)($form['param']??''));
+            $pindex=(int)($form['pindex']??0);
+            (new StampStore($this->db))->post($tid,(int)($form['mid']??0),$pindex,(string)($form['name']??''),$contents,(string)($form['param']??''));
+            $this->maybeCpuStamp($tid,$pindex,$form);
         }
         return $this->xml($this->stampXml('chat',$tid,0));
     }
@@ -58,8 +64,28 @@ final class MiscDispatcher
     {
         $must=$this->must($form);$tid=(int)($must[2]??$form['tid']??1);$pindex=(int)($must[3]??$form['pindex']??0);$mid=(int)($must[4]??$form['mid']??0);
         $info=explode(',',(string)($form['stamp_info']??''));$since=(isset($info[1])&&$info[1]!=='')?(int)$info[1]:0;
-        if(isset($info[2])&&$info[2]!=='')(new StampStore($this->db))->post($tid,$mid,$pindex,(string)($info[3]??''),(string)$info[2],'');
+        if(isset($info[2])&&$info[2]!==''){
+            (new StampStore($this->db))->post($tid,$mid,$pindex,(string)($info[3]??''),(string)$info[2],'');
+            $this->maybeCpuStamp($tid,$pindex,$form);
+        }
         return $this->xml($this->stampXml('stamp_info',$tid,$since));
+    }
+
+    /** @param array<string,mixed> $form */
+    private function maybeCpuStamp(int $tid,int $humanPindex,array $form): void
+    {
+        // Python reference: random.random() > 0.55 returns, so CPUs answer 55%
+        // of the time. If no match can be resolved it also defaults to yonma.
+        if(random_int(1,100)>55)return;
+        $seats=4;$pcuid=(string)($form['pcuid']??'');
+        if($pcuid!==''){
+            $match=$this->db->getMatch($pcuid);
+            if(is_array($match))$seats=max(1,(int)($match['seats']??4));
+        }
+        if($seats<2)return;
+        $seat=($humanPindex+random_int(1,$seats-1))%$seats;
+        $reply=self::CPU_STAMP_REPLIES[random_int(0,count(self::CPU_STAMP_REPLIES)-1)];
+        (new StampStore($this->db))->post($tid,0,$seat,'CPU',$reply,'');
     }
 
     private function presentDone(array $form): string
