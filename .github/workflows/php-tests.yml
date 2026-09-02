@@ -47,6 +47,8 @@ jobs:
         run: php tests/tsumo_choices_test.php
       - name: CPU AI
         run: php tests/cpu_ai_test.php
+      - name: Live Table CPU AI
+        run: php tests/table_cpu_integration_test.php
       - name: Match stream
         run: php tests/match_test.php
       - name: Calls and wins
