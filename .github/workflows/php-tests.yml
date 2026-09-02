@@ -114,6 +114,7 @@ jobs:
             sleep 0.25
           done
           php tests/http_transport_client.php
+          php tests/http_facility_ip4_client.php
 
   soak:
     runs-on: ubuntu-latest
