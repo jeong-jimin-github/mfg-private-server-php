@@ -71,13 +71,3 @@ try{
 
 echo "vfglog diagnostics OK\n";
 ''')
-
-wf = Path('.github/workflows/php-tests.yml')
-s = wf.read_text()
-anchor = "      - name: e-Amusement bootstrap parity\n        run: php tests/eamuse_bootstrap_test.php\n"
-addition = anchor + "      - name: vfglog diagnostics\n        run: php tests/vfglog_test.php\n"
-if anchor not in s:
-    raise SystemExit('workflow anchor missing')
-if 'php tests/vfglog_test.php' not in s:
-    s = s.replace(anchor, addition, 1)
-wf.write_text(s)
