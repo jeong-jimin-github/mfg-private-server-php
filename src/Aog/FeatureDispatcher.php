@@ -125,6 +125,6 @@ final class FeatureDispatcher
     {
         if(empty($slot['available']))return '<slot idx="'.$i.'"><available>0</available></slot>';$stock=(int)($slot['stock']??0);return '<slot idx="'.$i.'"><available>1</available><character_obj>'.$this->x((string)($slot['chara']??'OID_CHARACTER_1')).'</character_obj><start_time>'.(int)($slot['start']??time()).'</start_time><next_time>'.(int)($slot['next']??time()).'</next_time><has_next>'.($stock<self::DOJO_STOCK_MAX?1:0).'</has_next><reserve_souls>'.$stock.'</reserve_souls><all_souls>'.self::DOJO_STOCK_MAX.'</all_souls></slot>';
     }
-    private function xml(string $inner=''): string{return '<?xml version="1.0" encoding="UTF-8"?><response>'.$inner.'</response>';}
+    private function xml(string $inner=''): string{return '<?xml version="1.0" encoding="UTF-8"?><root><serv_st><code>0</code></serv_st>'.$inner.'</root>';}
     private function x(string $s): string{return htmlspecialchars($s,ENT_QUOTES|ENT_XML1,'UTF-8');}
 }

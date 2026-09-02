@@ -84,6 +84,6 @@ final class MiscDispatcher
     /** @return list<string> */
     private function must(array $form):array {$raw=(string)($form['must']??'');return $raw===''?[]:array_map('trim',explode(',',$raw));}
     private function infoData(string $kind,string $payload):string {return '<info_data kind="'.$this->x($kind).'">'.base64_encode($payload).'</info_data>';}
-    private function xml(string $inner=''):string {return '<?xml version="1.0" encoding="UTF-8"?><response>'.$inner.'</response>';}
+    private function xml(string $inner=''):string {return '<?xml version="1.0" encoding="UTF-8"?><root><serv_st><code>0</code></serv_st>'.$inner.'</root>';}
     private function x(string $s):string {return htmlspecialchars($s,ENT_QUOTES|ENT_XML1,'UTF-8');}
 }
