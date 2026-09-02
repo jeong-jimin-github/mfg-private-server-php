@@ -28,8 +28,8 @@ final class MiscDispatcher
             'present_done' => $this->presentDone($form),
             'competition_entry' => $this->xml('<competition><entry_result>1</entry_result></competition>'),
             'chk_tabooword' => $this->xml('<taboo_chk><result>0</result></taboo_chk>'),
-            'item_gain_log','item_consume_log','notice_done','important_notice_done',
-            'set_favorite_character','odekake_done','coop_done','eashop_done' => $this->xml(),
+            'item_gain_log','item_consume_log' => $this->logOnly($form,'itemlog'),
+            'notice_done','important_notice_done','set_favorite_character','odekake_done','coop_done','eashop_done' => $this->xml(),
             'reconnect' => $this->reconnect($form),
             default => null,
         };
@@ -86,6 +86,13 @@ final class MiscDispatcher
         $seat=($humanPindex+random_int(1,$seats-1))%$seats;
         $reply=self::CPU_STAMP_REPLIES[random_int(0,count(self::CPU_STAMP_REPLIES)-1)];
         (new StampStore($this->db))->post($tid,0,$seat,'CPU',$reply,'');
+    }
+
+    /** @param array<string,mixed> $form */
+    private function logOnly(array $form,string $label): string
+    {
+        TelemetryLog::write($form,$label);
+        return $this->xml();
     }
 
     private function presentDone(array $form): string
