@@ -65,9 +65,12 @@ function ht_eamuse(string $base,string $xml,string $info='1-01234567-89ab'):arra
 
 $base=rtrim((string)(getenv('TEST_BASE_URL')?:'http://127.0.0.1:18080'),'/');
 
-[$health]=ht_request($base.'/health');
-ht_ok(str_contains($health,'VFG local server ok'),'health body');
-ht_ok(str_contains($health,'game:    '.$base.'/aog'),'health game URL');
+foreach(['/health','/status'] as $statusPath){
+    [$health]=ht_request($base.$statusPath);
+    ht_ok(str_contains($health,'VFG local server ok'),$statusPath.' body');
+    ht_ok(str_contains($health,'e-amuse: '.$base),$statusPath.' e-amuse URL');
+    ht_ok(str_contains($health,'game:    '.$base.'/aog'),$statusPath.' game URL');
+}
 
 [$services]=ht_eamuse($base,'<call model="VFG:J:A:A:2025122300" srcid="HTTPTEST0001"><services method="get"/></call>');
 ht_ok(isset($services->services)&&(string)$services->services['status']==='0','services.get over HTTP');
@@ -92,5 +95,26 @@ ht_ok((int)$coin->eacoin->balance===57300,'PASELI HTTP balance');
 $aogXml=new SimpleXMLElement($aog);
 ht_ok($aogXml->getName()==='root'&&(string)$aogXml->serv_st->code==='0','AOG HTTP root/serv_st');
 ht_ok(isset($aogXml->boot_mes)&&str_ends_with((string)$aogXml->boot_mes->moserv_url,'/aog'),'AOG appli_boot HTTP payload');
+
+// Independent HTTP requests must see the same persisted session/profile state.
+[$loginBody]=ht_request(
+    $base.'/aog/login','POST',http_build_query(['user_id'=>'HTTP-E2E','guest'=>'0']),
+    ['Content-Type: application/x-www-form-urlencoded']
+);
+$login=new SimpleXMLElement($loginBody);$sid=(string)$login->auth->session_id;
+ht_ok($sid!=='','AOG HTTP login session missing');
+$literal='network-state-'.bin2hex(random_bytes(3));
+ht_request(
+    $base.'/aog/client_state_write','POST',
+    http_build_query(['pcuid'=>$sid,'kind'=>'profile','data'=>base64_encode($literal)]),
+    ['Content-Type: application/x-www-form-urlencoded']
+);
+[$readBody]=ht_request(
+    $base.'/aog/client_state_read','POST',http_build_query(['pcuid'=>$sid,'one_kind'=>'profile']),
+    ['Content-Type: application/x-www-form-urlencoded']
+);
+$read=new SimpleXMLElement($readBody);
+ht_ok(isset($read->state->data),'AOG HTTP state read missing');
+ht_ok(base64_decode((string)$read->state->data,true)===$literal,'AOG HTTP cross-request state mismatch');
 
 echo "real HTTP RC4/LZ77/KBin/AOG integration OK\n";
