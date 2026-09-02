@@ -1,0 +1,33 @@
+name: PHP regression tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, simplexml, pdo_sqlite, mbstring
+      - name: Syntax check
+        run: find src public tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Protocol
+        run: php tests/protocol_test.php
+      - name: KBin
+        run: php tests/kbin_test.php
+      - name: Mahjong core
+        run: php tests/mahjong_test.php
+      - name: Score math
+        run: php tests/score_math_test.php
+      - name: Match stream
+        run: php tests/match_test.php
+      - name: Features
+        run: php tests/features_test.php
