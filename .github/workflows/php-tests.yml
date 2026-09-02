@@ -116,10 +116,16 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: pdo_mysql
+          extensions: pdo_mysql, simplexml
       - name: MySQL database
         env:
           TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=mfg;charset=utf8mb4
           TEST_DB_USER: root
           TEST_DB_PASS: root
         run: php tests/database_test.php
+      - name: MySQL cross-request AOG persistence
+        env:
+          TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=mfg;charset=utf8mb4
+          TEST_DB_USER: root
+          TEST_DB_PASS: root
+        run: php tests/mysql_request_persistence_test.php
