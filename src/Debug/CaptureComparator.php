@@ -87,10 +87,13 @@ final class CaptureComparator
         for($p=$el->previousSibling;$p;$p=$p->previousSibling)if($p instanceof DOMElement&&$p->tagName===$el->tagName)$index++;
         $path=$parent.'/'.$el->tagName.'['.$index.']';
         $attrs=[];
-        foreach($el->attributes as $attr){$value=$attr->name==='__type'||$compareValues?'='.$attr->value:'';$attrs[]=$attr->name.$value;}
+        foreach($el->attributes as $attr){
+            $value=($attr->name==='__type'||$compareValues)?'='.$attr->value:'';
+            $attrs[]=$attr->name.$value;
+        }
         sort($attrs,SORT_STRING);
         $text='';
-        foreach($el->childNodes as $child)if($child->nodeType===DOMNode::TEXT_NODE)$text.=trim($child->nodeValue??'');
+        foreach($el->childNodes as $child)if($child->nodeType===XML_TEXT_NODE)$text.=trim($child->nodeValue??'');
         $row=$path.' attrs{'.implode(',',$attrs).'}';
         if($text!=='')$row.=$compareValues?' text='.json_encode($text,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):' text=#';
         $out[]=$row;
