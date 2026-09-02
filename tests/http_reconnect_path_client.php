@@ -33,7 +33,18 @@ $re=rp_post($base.'/aog/reconnect/2025122300/'.rawurlencode($pcuid).'/WEBID001/'
 rp_ok(isset($re->entry),'path-shaped reconnect fell through to generic success');
 rp_ok((int)$re->entry->tid===$tid,'reconnect lost stored tid');
 rp_ok((int)$re->entry->gmode===3,'reconnect lost stored gmode');
-rp_ok((string)$re->entry->gserv_url!=='','reconnect gserv_url');
+rp_ok((string)$re->entry->gserv_url===$base.'/aog/','reconnect must return absolute gserv_url');
 rp_ok((int)$re->entry->next_sno>=0,'reconnect next_sno');
+foreach(['last_cyoukou_num','cyoukou_num','ste_oya1_limit_time','ste_limit_time','ste_reechi1_limit_time','naki_limit_time','agari_limit_time','naki_choice_limit_time','reechi_choice_limit_time','last_cyoukou_limit_time','last_time','pay_mode'] as $field){
+    rp_ok(isset($re->entry->{$field}),'reconnect parser field missing '.$field);
+}
+
+// Even an unknown session must return the same parser-safe entry contract rather
+// than the earlier abbreviated response that omitted all timing fields.
+$unknown=rp_post($base.'/aog/reconnect/2025122300/UNKNOWN-SESSION/WEBID002/');
+rp_ok(isset($unknown->entry),'unknown reconnect missing entry');
+rp_ok((int)$unknown->entry->gmode===1,'unknown reconnect default gmode');
+rp_ok((string)$unknown->entry->gserv_url===$base.'/aog/','unknown reconnect absolute gserv_url');
+foreach(['ste_limit_time','naki_limit_time','agari_limit_time','pay_mode'] as $field)rp_ok(isset($unknown->entry->{$field}),'unknown reconnect parser field '.$field);
 
 echo "path-shaped reconnect HTTP routing OK\n";
