@@ -183,6 +183,27 @@ SQL);
         $this->pdo->prepare('DELETE FROM sessions WHERE session_id=?')->execute([$sessionId]);
     }
 
+    public function saveMatch(string $matchId, array $payload): void
+    {
+        $this->pdo->prepare('INSERT INTO matches(match_id,payload,updated_at) VALUES(?,?,?) ON CONFLICT(match_id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at')
+            ->execute([$matchId,json_encode($payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),time()]);
+    }
+
+    public function getMatch(string $matchId): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT payload FROM matches WHERE match_id=?');
+        $stmt->execute([$matchId]);
+        $v = $stmt->fetchColumn();
+        if ($v === false) return null;
+        $row = json_decode((string)$v, true);
+        return is_array($row) ? $row : null;
+    }
+
+    public function deleteMatch(string $matchId): void
+    {
+        $this->pdo->prepare('DELETE FROM matches WHERE match_id=?')->execute([$matchId]);
+    }
+
     public function getKv(string $scope, string $key, mixed $default = null): mixed
     {
         $stmt = $this->pdo->prepare('SELECT value FROM kv WHERE scope=? AND key=?');
