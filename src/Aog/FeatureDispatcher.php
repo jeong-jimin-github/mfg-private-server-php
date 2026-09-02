@@ -100,14 +100,29 @@ final class FeatureDispatcher
 
     private function musicReserve(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['gacha_id']??$form['series_id']??91);$entry=GachaPools::seriesEntry($series);
-        if(($entry['type']??'')!=='Music')$series=91;
-        $req=random_int(1001,PHP_INT_MAX);$this->db->setKv('music_gacha',$pcuid,['request_id'=>$req,'series'=>$series,'time'=>time()]);return $this->xml('<gacha_reserve><is_success>1</is_success><request_id>'.$req.'</request_id></gacha_reserve>');
+        // Python reference keeps a process-global monotonic request sequence and
+        // binds each request id to the requested series. Persist both pieces so
+        // PHP-FPM requests preserve the same contract.
+        $series=(int)($form['gacha_id']??$form['series_id']??0);
+        $last=(int)$this->db->getKv('music_gacha_meta','seq',1000);
+        $req=max(1001,$last+1);
+        $this->db->setKv('music_gacha_meta','seq',$req);
+        $this->db->setKv('music_gacha',(string)$req,['series'=>$series,'time'=>time()]);
+        return $this->xml('<gacha_reserve><is_success>1</is_success><request_id>'.$req.'</request_id></gacha_reserve>');
     }
 
     private function musicPlay(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('music_gacha',$pcuid,['series'=>91]);$series=(int)($row['series']??91);$pool=GachaPools::poolForSeries($series);if(!$pool)$pool=GachaPools::poolForSeries(91);$oid=$pool[random_int(0,count($pool)-1)];$this->db->deleteKv('music_gacha',$pcuid);return $this->xml('<gacha_result><is_success>1</is_success><gain_items><item>'.$this->x($oid).'</item></gain_items><gift>2</gift><fight_spirits></fight_spirits></gacha_result>');
+        $req=(int)($form['request_id']??0);
+        $row=$req>0?$this->db->getKv('music_gacha',(string)$req,null):null;
+        $series=is_array($row)?(int)($row['series']??0):0;
+        if($req>0)$this->db->deleteKv('music_gacha',(string)$req);
+        $pool=GachaPools::poolForSeries($series);
+        if(!$pool)$pool=GachaPools::poolForSeries(91);
+        if(!$pool)$pool=['OID_ReachBgm148'];
+        $oid=$pool[random_int(0,count($pool)-1)];
+        error_log('[MFG][music-gacha] series='.$series.' request='.$req.' -> '.$oid);
+        return $this->xml('<gacha_result><is_success>1</is_success><gain_items><item>'.$this->x($oid).'</item></gain_items><gift>2</gift><fight_spirits></fight_spirits></gacha_result>');
     }
 
     /** @param array<string,mixed> $form */
