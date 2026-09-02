@@ -71,7 +71,10 @@ final class Dispatcher
         $node = $this->findModuleNode($root, $wireNode) ?? $this->findModuleNode($root, $wireNode === 'vfgcard' ? 'cardmng' : 'vfgcard') ?? $root;
         $rawCard = $node ? (string)($node['cardid'] ?? $node['card_id'] ?? '') : '';
         $refid = $node ? strtoupper(trim((string)($node['refid'] ?? ''))) : '';
-        $canonical = (bool)preg_match('/^[0-9A-Fa-f]{16}$/', preg_replace('/\s+/', '', $rawCard));
+        $normalized = preg_replace('/\s+/', '', $rawCard) ?? '';
+        $canonical = (bool)preg_match('/^[0-9A-Fa-f]{16}$/', $normalized);
+        $strict = strtolower(trim((string)(getenv('VFG_CARDMNG_MODE') ?: 'compat'))) === 'strict';
+        $inquireMode = strtolower(trim((string)(getenv('VFG_CARDMNG_INQUIRE_MODE') ?: 'auto')));
 
         if ($rawCard === '' && in_array($method, ['inquire','getrefid'], true)) {
             return $this->cardXml($wireNode, $method === 'inquire' ? ' status="112"' : ' status="110"');
@@ -79,9 +82,15 @@ final class Dispatcher
         if (in_array($method, ['bindmodel','bindcard'], true) && $refid === '') {
             return $this->cardXml($wireNode, ' status="110"');
         }
+        if (!$canonical && $rawCard !== '' && $strict) {
+            return $this->cardXml($wireNode, $method === 'inquire' ? ' status="112"' : ' status="110"');
+        }
 
-        $cardId = $canonical ? strtoupper(preg_replace('/\s+/', '', $rawCard)) : self::DEFAULT_CARDID;
+        $cardId = $canonical ? strtoupper($normalized) : self::DEFAULT_CARDID;
         if ($method === 'inquire') {
+            if ($inquireMode === 'new') {
+                return $this->cardXml($wireNode, ' status="112"');
+            }
             $rec = $this->db->getCard($cardId);
             if (!$rec || !(int)$rec['issued']) {
                 return $this->cardXml($wireNode, ' status="112"');
@@ -94,6 +103,10 @@ final class Dispatcher
         }
         if ($method === 'getrefid') {
             $pin = $node ? (string)($node['passwd'] ?? '') : '';
+            $existing = $this->db->getCard($cardId);
+            if (!$canonical && $existing && (int)$existing['issued']) {
+                return $this->cardXml($wireNode, ' refid="' . $this->x($existing['refid']) . '" dataid="' . $this->x($existing['refid']) . '"');
+            }
             $rec = $this->db->issueCard($cardId, preg_match('/^\d{4}$/', $pin) ? $pin : '0000');
             return $this->cardXml($wireNode, ' refid="' . $this->x($rec['refid']) . '" dataid="' . $this->x($rec['refid']) . '"');
         }
