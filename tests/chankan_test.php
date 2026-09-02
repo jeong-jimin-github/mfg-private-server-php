@@ -13,12 +13,12 @@ use Mfg\Mahjong\YakuBits;
 function ck(bool $v,string $m):void{if(!$v)throw new RuntimeException($m);}
 
 // Human seat 0 upgrades a pon of 6m (index 5). CPU seat 1 is waiting on that
-// tile with a tanyao hand, so it must rob the added kan before rinshan draw.
+// tile with no ordinary yaku. Chankan alone must make the ron legal before rinshan draw.
 $s=Table::create(Mahjong::TONPU,0,777);
 $s['state']='discard';
 $s['hands'][0]=[5,0,1,2,9,10,11,18,19,20,27];
 $s['melds'][0]=[['kind'=>'pon','tiles'=>[5,5,5],'called'=>5,'from_seat'=>1]];
-$s['hands'][1]=[1,2,3,10,11,12,19,20,21,4,4,5,5];
+$s['hands'][1]=[0,1,2,12,13,14,24,25,26,27,27,3,4];
 $s['hands'][2]=[0,1,2,3,6,7,8,9,13,14,18,22,23];
 $s['hands'][3]=[0,1,2,6,7,8,9,10,11,18,19,20,30];
 $s['wall']=array_fill(0,30,8);

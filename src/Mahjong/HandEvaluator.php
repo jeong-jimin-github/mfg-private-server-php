@@ -28,7 +28,8 @@ final class HandEvaluator
         bool $ippatsu,
         array $doraIndicators,
         array $uraIndicators,
-        int $taku
+        int $taku,
+        bool $allowNoYaku = false
     ): ?array {
         $openMelds = count($melds);
         $counts = Mahjong::countsOf($hand);
@@ -67,7 +68,7 @@ final class HandEvaluator
             $extra=self::globalPatternYaku($hand,$melds,false,$menzen,$winTile);
             $han+=$extra['han'];$yakuman+=$extra['yakuman'];$yaku=array_merge($yaku,$extra['yaku']);
 
-            if($han<=0 && $yakuman<=0)continue;
+            if(!$allowNoYaku && $han<=0 && $yakuman<=0)continue;
             $fu=self::fuFor($pair,$sets,$melds,$hand,$winTile,$isTsumo,$seatWind,$roundWind,$pinfu,$menzen);
             $cand=self::finish($han,$fu,$dora,$yaku,$yakuman);
             if($best===null || self::better($cand,$best))$best=$cand;
