@@ -8,6 +8,7 @@ spl_autoload_register(static function(string $class):void{
 
 use Mfg\Mahjong\Mahjong;
 use Mfg\Mahjong\Table;
+use Mfg\Mahjong\YakuBits;
 
 function assert_rule(bool $ok,string $message):void{if(!$ok)throw new RuntimeException($message);}
 
@@ -21,7 +22,10 @@ $s['last_draw_rinshan']=false;
 $t=new Table($s);
 $t->onCommand(Table::S_TSUMO_AGARI,0,Mahjong::idxToPai(5));
 $st=$t->state();
-assert_rule(str_contains($t->cellsFrom(0),'Haitei'),'haitei was not merged into table win result');
+$xml=$t->cellsFrom(0);
+preg_match('/<yaku2>(\d+)<\/yaku2>/',$xml,$m);
+$haitei=YakuBits::words(['Haitei'])['high'];
+assert_rule(isset($m[1])&&(((int)$m[1]&$haitei)!==0),'haitei bit was not merged into table win result');
 assert_rule($st['honba']===1,'dealer tsumo must continue with one honba');
 assert_rule($st['advance_kyoku']===false,'dealer tsumo must not advance kyoku');
 
