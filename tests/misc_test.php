@@ -27,10 +27,19 @@ if(!str_contains((string)$xml,'<additional_mg>0</additional_mg>'))throw new Runt
 $d->dispatch('gchat',['tid'=>'9','mid'=>'1','pindex'=>'0','name'=>'ME','contents'=>'TableSticker001','param'=>'']);
 $xml=$d->dispatch('gchat',['tid'=>'9']);
 $root=new SimpleXMLElement((string)$xml);$chat=$root->chat??null;
-if(!$chat instanceof SimpleXMLElement||count($chat->d)!==1)throw new RuntimeException('chat persistence');
-$row=$chat->d[0];
-if((int)$row['idx']!==1||(int)$row['mid']!==1||(int)$row['pindex']!==0||(int)$row['time']<=0)throw new RuntimeException('chat attributes');
-if((string)$row->name!=='ME'||(string)$row->contents!=='TableSticker001'||(string)$row->param!=='')throw new RuntimeException('chat payload');
+if(!$chat instanceof SimpleXMLElement||count($chat->d)<1)throw new RuntimeException('chat persistence');
+
+// Python reference deliberately gives CPU seats a 55% chance to reply, so the
+// room may contain either only the human post or an additional CPU row. Locate
+// the human row instead of asserting a random total row count.
+$human=null;
+foreach($chat->d as $candidate){
+    if((int)$candidate['mid']===1&&(int)$candidate['pindex']===0&&(string)$candidate->contents==='TableSticker001'){$human=$candidate;break;}
+}
+if(!$human instanceof SimpleXMLElement)throw new RuntimeException('human chat row missing');
+if((int)$human['idx']!==1||(int)$human['time']<=0)throw new RuntimeException('chat attributes');
+if((string)$human->name!=='ME'||(string)$human->contents!=='TableSticker001'||(string)$human->param!=='')throw new RuntimeException('chat payload');
+
 // The Python reference's _stamp_xml contract is <chat><d .../></chat>; there
 // is deliberately no legacy <last_idx> sibling. Cursoring is driven by d@idx.
 if(isset($root->last_idx))throw new RuntimeException('legacy last_idx must not be emitted');
