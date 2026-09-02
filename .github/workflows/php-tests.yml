@@ -25,6 +25,8 @@ jobs:
         run: php tests/protocol_test.php
       - name: KBin
         run: php tests/kbin_test.php
+      - name: Cardmng and eacoin parity
+        run: php tests/cardmng_eacoin_test.php
       - name: Mahjong core
         run: php tests/mahjong_test.php
       - name: Score math
