@@ -103,10 +103,11 @@ final class FeatureDispatcher
             $body.='<info><id>'.$id.'</id><label>'.$this->x($label).'</label><ticket_nr>'.$ticket.'</ticket_nr><now_active>1</now_active><series_type>'.$this->x($stype).'</series_type><items>';
             foreach($pool as $oid)$body.='<item>'.$this->x($oid).'</item>';
             $body.='</items><pickup_charas>';
-            if(isset(self::PICKUP_CHARA[$id]))$body.='<chara>'.$this->x(self::PICKUP_CHARA[$id]).'</chara>';
+            if(isset(self::PICKUP_CHARA[$id])) $body.='<chara>'.$this->x(self::PICKUP_CHARA[$id]).'</chara>';
+            elseif($stype==='Pickup' && !isset(self::UNLOCKS[$id])) $body.='<chara>Chara01</chara>';
             $body.='</pickup_charas><custom_pickup_items>';
             if(isset(self::UNLOCKS[$id]))$body.='<item>'.$this->x(self::UNLOCKS[$id]).'</item>';
-            $body.='</custom_pickup_items></info>';
+            $body.='</custom_pickup_items><exchange_items></exchange_items><start_date>2020/01/01 00:00:00</start_date><end_date>2099/12/31 23:59:59</end_date></info>';
         }
         return $this->xml($body.'</gacha_schedule>');
     }
@@ -117,23 +118,23 @@ final class FeatureDispatcher
         for($i=0;$i<$count;$i++)$draw[]=$pool[random_int(0,count($pool)-1)];
         if(!isset(self::MUSIC_POOL[$series])&&isset(self::UNLOCKS[$series])&&random_int(1,100)<=10)$draw[0]=self::UNLOCKS[$series];
         $token=bin2hex(random_bytes(8));$this->db->setKv('gacha',$pcuid,['token'=>$token,'series'=>$series,'items'=>$draw,'time'=>time()]);
-        return $this->xml('<gacha><result>0</result><reserve_id>'.$token.'</reserve_id></gacha>');
+        return $this->xml('<transaction_info><transaction_id>'.$token.'</transaction_id></transaction_info>');
     }
 
     private function getGachaResult(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('gacha',$pcuid,['items'=>[]]);$items=is_array($row['items']??null)?$row['items']:[];$body='<gacha_result><result>0</result><items>';
-        foreach($items as $oid)$body.='<item>'.$this->x((string)$oid).'</item>';
-        return $this->xml($body.'</items></gacha_result>');
+        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('gacha',$pcuid,['items'=>[]]);$items=is_array($row['items']??null)?$row['items']:[];$body='<lottery_result>';
+        foreach($items as $oid)$body.='<data><character_id>0</character_id><unique_id>'.$this->x(substr(hash('sha256',(string)$oid.random_int(1,PHP_INT_MAX)),0,12)).'</unique_id></data>';
+        return $this->xml($body.'</lottery_result><gift><acquired>0</acquired><prev>0</prev><after>0</after></gift>');
     }
 
     private function musicReserve(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['series_id']??91);$this->db->setKv('music_gacha',$pcuid,['reserved'=>true,'series'=>$series,'time'=>time()]);return $this->xml('<music_gacha><result>0</result></music_gacha>');
+        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['gacha_id']??$form['series_id']??91);$req=random_int(1001,PHP_INT_MAX);$this->db->setKv('music_gacha',$pcuid,['request_id'=>$req,'series'=>$series,'time'=>time()]);return $this->xml('<gacha_reserve><is_success>1</is_success><request_id>'.$req.'</request_id></gacha_reserve>');
     }
     private function musicPlay(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('music_gacha',$pcuid,['series'=>91]);$series=(int)($row['series']??91);$pool=self::MUSIC_POOL[$series]??self::MUSIC_POOL[91];$oid=$pool[random_int(0,count($pool)-1)];$this->db->deleteKv('music_gacha',$pcuid);return $this->xml('<music_gacha><result>0</result><gain_items><item>'.$this->x($oid).'</item></gain_items></music_gacha>');
+        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('music_gacha',$pcuid,['series'=>91]);$series=(int)($row['series']??91);$pool=self::MUSIC_POOL[$series]??self::MUSIC_POOL[91];$oid=$pool[random_int(0,count($pool)-1)];$this->db->deleteKv('music_gacha',$pcuid);return $this->xml('<gacha_result><is_success>1</is_success><gain_items><item>'.$this->x($oid).'</item></gain_items><gift>2</gift><fight_spirits></fight_spirits></gacha_result>');
     }
 
     /** @return array{0:string,1:array<string,mixed>} */
