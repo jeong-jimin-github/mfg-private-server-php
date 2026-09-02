@@ -44,8 +44,18 @@ final class MiscDispatcher
     {
         $pcuid=(string)($form['pcuid']??'GUEST');
         $m=$this->db->getMatch($pcuid);
-        if(!$m) return $this->xml('<entry><gserv_id>1</gserv_id><tid>1</tid><pindex>0</pindex><next_sno>0</next_sno><gmode>1</gmode></entry>');
-        return $this->xml('<entry><gserv_id>1</gserv_id><tid>'.(int)($m['tid']??1).'</tid><pindex>'.(int)($m['pindex']??0).'</pindex><next_sno>'.(int)($m['next_sno']??0).'</next_sno><last_cyoukou_num>3</last_cyoukou_num><cyoukou_num>3</cyoukou_num><ste_oya1_limit_time>15000</ste_oya1_limit_time><ste_limit_time>10000</ste_limit_time><ste_reechi1_limit_time>15000</ste_reechi1_limit_time><naki_limit_time>8000</naki_limit_time><agari_limit_time>10000</agari_limit_time><naki_choice_limit_time>8000</naki_choice_limit_time><reechi_choice_limit_time>8000</reechi_choice_limit_time><last_cyoukou_limit_time>30000</last_cyoukou_limit_time><last_time>30000</last_time><gserv_url>/aog/</gserv_url><pay_mode>0</pay_mode><gmode>'.(int)($m['gmode']??1).'</gmode></entry>');
+        if(!is_array($m))$m=['tid'=>1,'pindex'=>0,'next_sno'=>0,'gmode'=>1];
+        $url=$this->gameBaseUrl();
+        return $this->xml('<entry><gserv_id>1</gserv_id><tid>'.(int)($m['tid']??1).'</tid><pindex>'.(int)($m['pindex']??0).'</pindex><next_sno>'.(int)($m['next_sno']??0).'</next_sno><last_cyoukou_num>3</last_cyoukou_num><cyoukou_num>3</cyoukou_num><ste_oya1_limit_time>15000</ste_oya1_limit_time><ste_limit_time>10000</ste_limit_time><ste_reechi1_limit_time>15000</ste_reechi1_limit_time><naki_limit_time>8000</naki_limit_time><agari_limit_time>10000</agari_limit_time><naki_choice_limit_time>8000</naki_choice_limit_time><reechi_choice_limit_time>8000</reechi_choice_limit_time><last_cyoukou_limit_time>30000</last_cyoukou_limit_time><last_time>30000</last_time><gserv_url>'.$this->x($url).'</gserv_url><pay_mode>0</pay_mode><gmode>'.(int)($m['gmode']??1).'</gmode></entry>');
+    }
+
+    private function gameBaseUrl(): string
+    {
+        $forwarded=strtolower(trim((string)($_SERVER['HTTP_X_FORWARDED_PROTO']??'')));
+        $https=$forwarded==='https'||((string)($_SERVER['HTTPS']??'')!==''&&(string)($_SERVER['HTTPS']??'')!=='off');
+        $scheme=$https?'https':'http';
+        $host=(string)($_SERVER['HTTP_HOST']??'127.0.0.1');
+        return $scheme.'://'.$host.'/aog/';
     }
 
     private function gchat(array $form): string
@@ -74,8 +84,6 @@ final class MiscDispatcher
     /** @param array<string,mixed> $form */
     private function maybeCpuStamp(int $tid,int $humanPindex,array $form): void
     {
-        // Python reference: random.random() > 0.55 returns, so CPUs answer 55%
-        // of the time. If no match can be resolved it also defaults to yonma.
         if(random_int(1,100)>55)return;
         $seats=4;$pcuid=(string)($form['pcuid']??'');
         if($pcuid!==''){
