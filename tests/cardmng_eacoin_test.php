@@ -44,6 +44,7 @@ ce_ok($db->getCard($card)===null,'empty request created fallback card');
 $a=ce_attrs($d->dispatch($model,'cardmng','getrefid',ce_call('cardmng','getrefid',['cardid'=>$card,'passwd'=>'1234'])),'cardmng');
 ce_ok(array_keys($a)===['refid','dataid'],'getrefid shape');
 ce_ok($a['refid']===$a['dataid'],'getrefid identity mismatch');$refid=$a['refid'];
+ce_ok(($db->getCard($card)['pin']??'')==='1234','canonical PIN persistence');
 
 // Issued but unbound inquiry.
 $a=ce_attrs($d->dispatch($model,'cardmng','inquire',ce_call('cardmng','inquire',['cardid'=>$card])),'cardmng');
@@ -68,6 +69,7 @@ ce_ok($db->getCard($card)===$before,'strict mode mutated fallback card');putenv(
 // Default compat mode maps malformed requests back to the configured local identity.
 $a=ce_attrs($d->dispatch($model,'cardmng','getrefid',ce_call('cardmng','getrefid',['cardid'=>$garbled,'passwd'=>'<car'])),'cardmng');
 ce_ok($a===['refid'=>$refid,'dataid'=>$refid],'compat malformed getrefid');
+ce_ok(($db->getCard($card)['pin']??'')==='1234','garbled passwd replaced stored PIN');
 $a=ce_attrs($d->dispatch($model,'cardmng','inquire',ce_call('cardmng','inquire',['cardid'=>$garbled])),'cardmng');
 ce_ok(!isset($a['status'])&&$a['refid']===$refid,'compat malformed inquire');
 
@@ -81,6 +83,8 @@ $a=ce_attrs($d->dispatch($model,'cardmng','bindmodel',ce_call('cardmng','bindmod
 ce_ok($a===['status'=>'110'],'unknown bindmodel');
 $a=ce_attrs($d->dispatch($model,'vfgcard','authpass',ce_call('vfgcard','authpass',['refid'=>$refid,'passwd'=>'<car'])),'vfgcard');
 ce_ok($a===['status'=>'0'],'authpass compatibility');
+$a=ce_attrs($d->dispatch($model,'vfgcard','inquire',ce_call('vfgcard','inquire',['cardid'=>$card])),'vfgcard');
+ce_ok(!isset($a['status'])&&($a['refid']??'')===$refid,'vfgcard response node mirror');
 
 // PASELI parity: exact typed checkin fields, mutable local session, clamp at zero.
 $xml=$d->dispatch($model,'eacoin','checkin',ce_call('eacoin','checkin'));
@@ -102,6 +106,8 @@ $xml=$d->dispatch($model,'eacoin','opcheckin',ce_call('eacoin','opcheckin'));$e=
 ce_ok(count($e->children())===1&&isset($e->sessid)&&(string)$e->sessid['__type']==='str','opcheckin shape');
 foreach(['getlog','getoplog','getcampaign'] as $m){$xml=$d->dispatch($model,'eacoin',$m,ce_call('eacoin',$m));$e=ce_node($xml,'eacoin');ce_ok((string)$e->topic->sumdate==='0'&&(string)$e->topic->sumdate['__type']==='str',$m.' topic');}
 $d->dispatch($model,'eacoin','checkout',ce_call('eacoin','checkout',[],['sessid'=>$sess]));
+$xml=$d->dispatch($model,'eacoin','getbalance',ce_call('eacoin','getbalance',[],['sessid'=>$sess]));$e=ce_node($xml,'eacoin');
+ce_ok((string)$e->balance==='57300','checkout session fallback');
 
 putenv('VFG_CARDMNG_MODE');putenv('VFG_CARDMNG_INQUIRE_MODE');
 echo "cardmng/eacoin parity OK\n";
