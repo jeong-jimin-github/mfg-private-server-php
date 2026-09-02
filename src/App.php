@@ -6,6 +6,7 @@ namespace Mfg;
 
 use Mfg\Aog\Dispatcher as AogDispatcher;
 use Mfg\Aog\FeatureDispatcher;
+use Mfg\Aog\MiscDispatcher;
 use Mfg\Eamuse\Dispatcher as EamuseDispatcher;
 use Mfg\Protocol\EamuseProtocol;
 use Mfg\Protocol\KBinXml;
@@ -50,9 +51,25 @@ final class App
         if ($name === '') $name = trim((string)($_GET['f'] ?? ''), '/');
         $feature = (new FeatureDispatcher($this->db))->dispatch($name, $form);
         $xml = $feature ?? (new AogDispatcher($this->db))->dispatch($name, $form);
+        if (in_array($name, ['gget','gpost'], true) && !str_contains($xml, '<chat')) {
+            $xml = $this->appendMatchChat($xml, $name, $form);
+        }
         http_response_code(200);
         header('Content-Type: text/xml; charset=utf-8');
         echo $xml;
+    }
+
+    /** @param array<string,mixed> $form */
+    private function appendMatchChat(string $xml, string $name, array $form): string
+    {
+        $raw = (string)($form['must'] ?? '');
+        $parts = $raw === '' ? [] : (preg_split('#[/,]#', $raw) ?: []);
+        $tid = max(1, (int)($parts[2] ?? $form['tid'] ?? 1));
+        $since = $name === 'gget' ? (int)($parts[6] ?? 0) : 1000000000;
+        $chat = (new MiscDispatcher($this->db))->stampXml('chat', $tid, $since);
+        $at = strrpos($xml, '</root>');
+        if ($at === false) return $xml;
+        return substr($xml, 0, $at) . $chat . substr($xml, $at);
     }
 
     private function handleEamuse(string $wireBody): void
