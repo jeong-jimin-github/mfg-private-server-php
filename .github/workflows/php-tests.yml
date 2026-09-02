@@ -33,6 +33,8 @@ jobs:
         run: php tests/vfglog_test.php
       - name: GetMenuData parser contract
         run: php tests/menu_contract_test.php
+      - name: AOG boot and matching parity
+        run: php tests/aog_match_contract_test.php
       - name: Mahjong core
         run: php tests/mahjong_test.php
       - name: Score math
