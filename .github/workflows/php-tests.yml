@@ -84,6 +84,18 @@ jobs:
       - name: All AOG routes
         run: php tests/aog_routes_test.php
 
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: dom, simplexml, pdo_sqlite, mbstring
+      - name: All 23 game modes soak
+        run: php tests/all_modes_soak_test.php
+
   mysql:
     runs-on: ubuntu-latest
     services:
