@@ -26,6 +26,43 @@ final class RoundSettlement
     }
 
     /**
+     * Detect tenpai seats and their waits from serialized table hands.
+     *
+     * @param array<int,list<int>> $hands
+     * @param array<int,list<array<string,mixed>>> $melds
+     * @return array{tenpai:list<int>,waits:array<int,list<int>>}
+     */
+    public static function tenpaiStatus(array $hands,array $melds,int $seats,int $taku): array
+    {
+        $tenpai=[];$waits=[];
+        for($s=0;$s<$seats;$s++){
+            $hand=$hands[$s]??[];$counts=Mahjong::countsOf($hand);
+            if(array_sum($counts)%3!==1)continue;
+            $opened=count($melds[$s]??[]);
+            if(Mahjong::shanten($counts,$opened,$taku)!==0)continue;
+            $w=Mahjong::waitsOf($counts,$opened,$taku);
+            if(!$w)continue;
+            $tenpai[]=$s;$waits[$s]=$w;
+        }
+        return ['tenpai'=>$tenpai,'waits'=>$waits];
+    }
+
+    /**
+     * Apply exhaustive-draw deltas to a four-seat score vector.
+     *
+     * @param list<int> $scores
+     * @param list<int> $tenpaiSeats
+     * @return array{scores:list<int>,deltas:list<int>}
+     */
+    public static function applyExhaustiveDraw(array $scores,int $seats,array $tenpaiSeats): array
+    {
+        $scores=array_values(array_pad(array_map('intval',$scores),4,0));
+        $deltas=self::exhaustiveDrawDeltas($seats,$tenpaiSeats);
+        for($i=0;$i<4;$i++)$scores[$i]+=$deltas[$i];
+        return ['scores'=>$scores,'deltas'=>$deltas];
+    }
+
+    /**
      * Decide round continuation after a hand.
      *
      * @param list<int> $winners
