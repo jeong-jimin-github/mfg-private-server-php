@@ -45,6 +45,8 @@ jobs:
         run: php tests/kyuushu_test.php
       - name: TSUMOCHOICES parity
         run: php tests/tsumo_choices_test.php
+      - name: CPU AI
+        run: php tests/cpu_ai_test.php
       - name: Match stream
         run: php tests/match_test.php
       - name: Calls and wins
