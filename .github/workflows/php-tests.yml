@@ -84,6 +84,31 @@ jobs:
       - name: All AOG routes
         run: php tests/aog_routes_test.php
 
+  http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: dom, simplexml, pdo_sqlite, mbstring
+      - name: Real HTTP RC4/LZ77/KBin/AOG integration
+        env:
+          DB_DSN: sqlite:/tmp/mfg-http.sqlite
+          VFG_CARDMNG_MODE: strict
+          TEST_BASE_URL: http://127.0.0.1:18080
+        run: |
+          rm -f /tmp/mfg-http.sqlite /tmp/mfg-http.sqlite-wal /tmp/mfg-http.sqlite-shm
+          php -S 127.0.0.1:18080 -t public public/index.php >/tmp/mfg-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:18080/health >/dev/null; then break; fi
+            sleep 0.25
+          done
+          php tests/http_transport_client.php
+
   soak:
     runs-on: ubuntu-latest
     timeout-minutes: 10
