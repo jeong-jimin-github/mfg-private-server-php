@@ -1,0 +1,36 @@
+name: Sync exact gacha pools
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sync-gacha-pools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch original pool data
+        run: |
+          mkdir -p data
+          curl -fsSL 'https://raw.githubusercontent.com/jeong-jimin-github/mfg-private-server/main/data/gacha_pools.json' -o data/gacha_pools.json
+      - name: Verify source blob
+        run: |
+          test "$(git hash-object data/gacha_pools.json)" = 'ecf3b26ece1bcefc113a0413be8cc6ef2f3ac06e'
+          php -r '$d=json_decode(file_get_contents("data/gacha_pools.json"),true,512,JSON_THROW_ON_ERROR); if(count($d["series"]??[])!==141) exit(1); echo "gacha pools exact: ".count($d["standard_pool"]??[])." standard items, ".count($d["series"])." series\n";'
+      - name: Commit synced data
+        run: |
+          if git diff --quiet -- data/gacha_pools.json && git ls-files --error-unmatch data/gacha_pools.json >/dev/null 2>&1; then
+            echo 'Already synchronized.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/gacha_pools.json
+          git commit -m 'Sync exact gacha pool data'
+          git push
