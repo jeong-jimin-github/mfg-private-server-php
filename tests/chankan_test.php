@@ -8,6 +8,7 @@ spl_autoload_register(static function(string $class):void{
 
 use Mfg\Mahjong\Mahjong;
 use Mfg\Mahjong\Table;
+use Mfg\Mahjong\YakuBits;
 
 function ck(bool $v,string $m):void{if(!$v)throw new RuntimeException($m);}
 
@@ -32,7 +33,10 @@ $xml=$t->cellsFrom(0);
 
 ck(str_contains($xml,'kind="10"'),'kakan cell missing');
 ck(str_contains($xml,'kind="4"'),'rob-kakan ron cell missing');
-ck(str_contains($xml,'Chankan'),'chankan yaku missing from result');
+preg_match_all('/<yaku2>(\d+)<\/yaku2>/',$xml,$m);
+$chankan=YakuBits::words(['Chankan'])['high'];
+$found=false;foreach($m[1]??[] as $word)if((((int)$word)&$chankan)!==0){$found=true;break;}
+ck($found,'chankan yaku bit missing from result');
 ck($after['scores'][1]>$before[1],'rob-kakan winner score did not increase');
 ck($after['scores'][0]<$before[0],'kan declarer score did not decrease');
 ck($after['state']==='kyoku_end','chankan must end the hand');
