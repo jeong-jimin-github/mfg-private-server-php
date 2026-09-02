@@ -117,4 +117,33 @@ $read=new SimpleXMLElement($readBody);
 ht_ok(isset($read->state->data),'AOG HTTP state read missing');
 ht_ok(base64_decode((string)$read->state->data,true)===$literal,'AOG HTTP cross-request state mismatch');
 
-echo "real HTTP RC4/LZ77/KBin/AOG integration OK\n";
+// Python's game handlers append the in-match sticker stream to both gget and
+// gpost. Verify the public PHP response does the same, including original d
+// attributes/children and the empty gpost chat cursor response.
+foreach(['TableSticker001','TableSticker002'] as $sticker){
+    ht_request(
+        $base.'/aog/gchat','POST',
+        http_build_query(['tid'=>'9','mid'=>'1','pindex'=>'0','name'=>'ME','contents'=>$sticker,'param'=>'']),
+        ['Content-Type: application/x-www-form-urlencoded']
+    );
+}
+$mustGet='VFG:J:A:A:2025122300/HTTPCHAT/9/0/1/0/0';
+[$ggetBody]=ht_request(
+    $base.'/aog/gget','POST',http_build_query(['pcuid'=>'HTTPCHAT','ready'=>'0','must'=>$mustGet]),
+    ['Content-Type: application/x-www-form-urlencoded']
+);
+$gget=new SimpleXMLElement($ggetBody);ht_ok(isset($gget->chat),'gget chat stream missing');
+$chatRows=$gget->chat->d;ht_ok(count($chatRows)>=2,'gget did not echo sticker stream');
+foreach($chatRows as $row){
+    ht_ok((string)$row['idx']!==''&&(string)$row['mid']!==''&&(string)$row['pindex']!==''&&(string)$row['time']!=='','chat d attributes');
+    ht_ok(isset($row->name)&&isset($row->contents)&&isset($row->param),'chat d children');
+}
+$mustPost='VFG:J:A:A:2025122300/HTTPCHAT/9/0/1/0/0/0/0/0/0/0/0/0/0';
+[$gpostBody]=ht_request(
+    $base.'/aog/gpost','POST',http_build_query(['pcuid'=>'HTTPCHAT','must'=>$mustPost]),
+    ['Content-Type: application/x-www-form-urlencoded']
+);
+$gpost=new SimpleXMLElement($gpostBody);ht_ok(isset($gpost->chat),'gpost chat node missing');
+ht_ok(count($gpost->chat->d)===0,'gpost should use an exhausted chat cursor');
+
+echo "real HTTP RC4/LZ77/KBin/AOG/chat integration OK\n";
