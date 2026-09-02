@@ -74,8 +74,21 @@ final class Table
     public function flushPending():void
     {
         $p=$this->s['pending_choices'];if(!is_array($p))return;$this->s['pending_choices']=null;
-        $seat=(int)$p['seat'];$flags=(int)$p['flags'];$inner='<select>'.$flags.'</select><ptn_num>0</ptn_num>';
-        if(!empty($p['kans']))$inner.=$this->ints('kan_pai',array_map(fn($x)=>Mahjong::idxToPai((int)$x),$p['kans'])).$this->ints('kan_type',array_fill(0,count($p['kans']),1));
+        $seat=(int)$p['seat'];$flags=(int)$p['flags'];$patterns=is_array($p['patterns']??null)?$p['patterns']:[];
+        $inner='<select>'.$flags.'</select><ptn_num>'.count($patterns).'</ptn_num>';
+        $visible=$this->visibleCounts($seat);
+        foreach($patterns as $i=>$pattern){
+            $sute=(int)$pattern[0];$waits=array_values(array_map('intval',$pattern[1]??[]));$stat=[];
+            foreach($waits as $w)$stat[]=(($visible[$w]??0)>=4)?2:0;
+            $inner.='<ptn'.$i.'><sute_pai>'.Mahjong::idxToPai($sute).'</sute_pai><machi_num>'.count($waits).'</machi_num>'
+                .$this->ints('machi_pai',$this->pais($waits)).$this->ints('stat',$stat).'</ptn'.$i.'>';
+        }
+        $kans=is_array($p['kans']??null)?$p['kans']:[];
+        if($kans){
+            $kanPai=[];$kanType=[];
+            foreach($kans as $k){$kanPai[]=Mahjong::idxToPai((int)$k[0]);$kanType[]=(int)$k[1];}
+            $inner.=$this->ints('kan_pai',$kanPai).$this->ints('kan_type',$kanType);
+        }
         $this->cell(self::K_TSUMOCHOICES,$inner,[$seat]);
     }
 
@@ -129,10 +142,13 @@ final class Table
 
     private function offerTsumoChoices(int $seat):void
     {
-        $flags=self::F_SUTE;if($this->winResult($seat,(int)$this->s['drawn'][$seat],true)!==null)$flags|=self::F_TSUMOAGARI;
-        if(empty($this->s['riichi'][$seat])&&count($this->s['melds'][$seat])===0&&(int)$this->s['scores'][$seat]>=1000&&count($this->s['wall'])>=4&&$this->canReach($seat))$flags|=self::F_REACH;
+        $flags=self::F_SUTE;$patterns=[];
+        if($this->winResult($seat,(int)$this->s['drawn'][$seat],true)!==null)$flags|=self::F_TSUMOAGARI;
+        if(empty($this->s['riichi'][$seat])&&count($this->s['melds'][$seat])===0&&(int)$this->s['scores'][$seat]>=1000&&count($this->s['wall'])>=4){
+            $patterns=$this->tenpaiPatterns($seat);if($patterns)$flags|=self::F_REACH;
+        }
         $kans=$this->ankanOptions($seat);if($kans)$flags|=self::F_KAN;if($this->kyuushuOk($seat))$flags|=self::F_KYUSYU;
-        $this->s['pending_choices']=['seat'=>$seat,'flags'=>$flags,'kans'=>$kans];$this->s['state']='discard';
+        $this->s['pending_choices']=['seat'=>$seat,'flags'=>$flags,'patterns'=>$patterns,'kans'=>$kans];$this->s['state']='discard';
     }
 
     private function cpuTurn(int $seat):void
@@ -279,6 +295,54 @@ final class Table
         $this->cell(self::K_RYUKYOKU,$inner);$this->finishKyoku([],true,$status['tenpai'],$abortive);
     }
 
+    /** @return list<array{0:int,1:list<int>}> */
+    private function tenpaiPatterns(int $seat):array
+    {
+        $hand=$this->s['hands'][$seat];$opened=count($this->s['melds'][$seat]);$out=[];$seen=[];
+        foreach($hand as $tile){
+            $tile=(int)$tile;if(isset($seen[$tile]))continue;$seen[$tile]=true;$rest=$hand;$k=array_search($tile,$rest,true);if($k===false)continue;unset($rest[$k]);$rest=array_values($rest);
+            $c=Mahjong::countsOf($rest);if(Mahjong::shanten($c,$opened,(int)$this->s['taku'])!==0)continue;
+            $waits=Mahjong::waitsOf($c,$opened,(int)$this->s['taku']);if($waits)$out[]=[$tile,array_values($waits)];
+        }
+        return $out;
+    }
+
+    /** @return list<int> */
+    private function visibleCounts(int $seat):array
+    {
+        $c=array_fill(0,34,0);
+        foreach($this->s['hands'][$seat] as $t)$c[(int)$t]++;
+        for($s=0;$s<(int)$this->s['seats'];$s++){
+            foreach($this->s['discards'][$s] as $t)$c[(int)$t]++;
+            foreach($this->s['melds'][$s] as $m)foreach(($m['tiles']??[]) as $t)$c[(int)$t]++;
+        }
+        foreach(array_slice($this->s['dora_ind'],0,(int)$this->s['dora_open']) as $t)$c[(int)$t]++;
+        return array_map(fn($n)=>min(4,(int)$n),$c);
+    }
+
+    /** @return list<array{0:int,1:int}> */
+    private function ankanOptions(int $seat):array
+    {
+        if(empty($this->s['wall'])||(int)$this->s['kan_count']>=4)return [];
+        $c=Mahjong::countsOf($this->s['hands'][$seat]);$opened=count($this->s['melds'][$seat]);$out=[];
+        for($t=0;$t<34;$t++){
+            if(($c[$t]??0)!==4)continue;
+            if(!empty($this->s['riichi'][$seat])){
+                if(($this->s['drawn'][$seat]??null)!==$t)continue;
+                $before=$this->s['hands'][$seat];$k=array_search($t,$before,true);if($k!==false)unset($before[$k]);$before=array_values($before);
+                $beforeWaits=Mahjong::waitsOf(Mahjong::countsOf($before),$opened,(int)$this->s['taku']);sort($beforeWaits);
+                $after=array_values(array_filter($this->s['hands'][$seat],fn($x)=>(int)$x!==$t));
+                $afterWaits=Mahjong::waitsOf(Mahjong::countsOf($after),$opened+1,(int)$this->s['taku']);sort($afterWaits);
+                if(!$afterWaits||$beforeWaits!==$afterWaits)continue;
+            }
+            $out[]=[$t,1];
+        }
+        if(empty($this->s['riichi'][$seat])){
+            foreach($this->s['melds'][$seat] as $m){$tile=(int)($m['tiles'][0]??-1);if(($m['kind']??'')==='pon'&&$tile>=0&&($c[$tile]??0)>=1)$out[]=[$tile,3];}
+        }
+        return $out;
+    }
+
     private function cpuDiscardAfterCall(int $seat):void{$hand=$this->s['hands'][$seat];$best=(int)end($hand);$this->discard($seat,$best,false,false);}
     private function breakIppatsu():void{for($s=0;$s<(int)$this->s['seats'];$s++)$this->s['ippatsu'][$s]=false;}
     private function countTile(int $seat,int $tile):int{return array_count_values($this->s['hands'][$seat])[$tile]??0;}
@@ -287,10 +351,8 @@ final class Table
     /** @return list<list<int>> */
     private function chiOptions(int $seat,int $tile):array
     {if(Mahjong::isHonor($tile))return [];$c=Mahjong::countsOf($this->s['hands'][$seat]);$n=$tile%9;$out=[];if($n>=2&&($c[$tile-2]??0)&&($c[$tile-1]??0))$out[]=[$tile-2,$tile-1];if($n>=1&&$n<=7&&($c[$tile-1]??0)&&($c[$tile+1]??0))$out[]=[$tile-1,$tile+1];if($n<=6&&($c[$tile+1]??0)&&($c[$tile+2]??0))$out[]=[$tile+1,$tile+2];return $out;}
-    /** @return list<int> */
-    private function ankanOptions(int $seat):array{$c=Mahjong::countsOf($this->s['hands'][$seat]);$o=[];for($i=0;$i<34;$i++)if(($c[$i]??0)===4)$o[]=$i;return $o;}
     private function updateFuriten(int $seat):void{$c=Mahjong::countsOf($this->s['hands'][$seat]);if(array_sum($c)%3!==1)return;$w=Mahjong::waitsOf($c,count($this->s['melds'][$seat]),(int)$this->s['taku']);$this->s['furiten'][$seat]=count(array_intersect($w,$this->s['discards'][$seat]))>0;}
-    private function canReach(int $seat):bool{$hand=$this->s['hands'][$seat];foreach(array_values(array_unique($hand)) as $tile){$tmp=$hand;$k=array_search($tile,$tmp,true);unset($tmp[$k]);$tmp=array_values($tmp);if(Mahjong::shanten(Mahjong::countsOf($tmp),0,(int)$this->s['taku'])===0)return true;}return false;}
+    private function canReach(int $seat):bool{return !empty($this->tenpaiPatterns($seat));}
     private function kyuushuOk(int $seat):bool
     {
         if(!empty($this->s['any_call'])||!empty($this->s['discards'][$seat])||(int)$this->s['discard_count']>=(int)$this->s['seats'])return false;
