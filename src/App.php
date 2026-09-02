@@ -18,17 +18,21 @@ final class App
     public function handle(): void
     {
         $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
         $body = file_get_contents('php://input') ?: '';
 
-        if ($path === '/health') {
-            http_response_code(200);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo "VFG local server ok\n";
-            return;
-        }
         if ($path === '/healthz') {
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['ok'=>true,'service'=>'mfg-private-server-php','time'=>time()], JSON_UNESCAPED_SLASHES);
+            return;
+        }
+        if ($method === 'GET' && in_array($path, ['/', '/health', '/status'], true)) {
+            http_response_code(200);
+            header('Content-Type: text/plain; charset=utf-8');
+            $base = $this->baseUrl();
+            echo "VFG local server ok\n";
+            echo 'e-amuse: ' . $base . "\n";
+            echo 'game:    ' . rtrim($base, '/') . "/aog\n";
             return;
         }
         if (str_starts_with($path, '/aog')) {
