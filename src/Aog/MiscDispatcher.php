@@ -1,0 +1,89 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Mfg\Aog;
+
+use Mfg\Storage\Database;
+
+final class MiscDispatcher
+{
+    public function __construct(private Database $db) {}
+
+    public function dispatch(string $name,array $form): ?string
+    {
+        return match($name) {
+            'gchat' => $this->gchat($form),
+            'gget_stamp_info' => $this->ggetStampInfo($form),
+            'player_record','get_record' => $this->xml('<player_record></player_record>'),
+            'get_haifu_list' => $this->xml('<haifu_list></haifu_list>'),
+            'get_haifu_data' => $this->xml(),
+            'get_jongstone_info' => $this->xml('<jongstone_info><free_point>0</free_point><record_point>0</record_point></jongstone_info>'),
+            'get_mg' => $this->xml('<mg_info><mg>0</mg><additional_mg>0</additional_mg></mg_info>'),
+            'mission_date' => $this->xml($this->infoData('missions','{"list":[]}')),
+            'present_done' => $this->presentDone($form),
+            'competition_entry' => $this->xml('<competition><entry_result>1</entry_result></competition>'),
+            'chk_tabooword' => $this->xml('<taboo_chk><result>0</result></taboo_chk>'),
+            'item_gain_log','item_consume_log','notice_done','important_notice_done',
+            'set_favorite_character','odekake_done','coop_done','eashop_done' => $this->xml(),
+            'reconnect' => $this->reconnect($form),
+            default => null,
+        };
+    }
+
+    private function reconnect(array $form): string
+    {
+        $pcuid=(string)($form['pcuid']??'GUEST');
+        $m=$this->db->getMatch($pcuid);
+        if(!$m) return $this->xml('<entry><gserv_id>1</gserv_id><tid>1</tid><pindex>0</pindex><next_sno>0</next_sno><gmode>1</gmode></entry>');
+        return $this->xml('<entry><gserv_id>1</gserv_id><tid>'.(int)($m['tid']??1).'</tid><pindex>'.(int)($m['pindex']??0).'</pindex><next_sno>'.(int)($m['next_sno']??0).'</next_sno><last_cyoukou_num>3</last_cyoukou_num><cyoukou_num>3</cyoukou_num><ste_oya1_limit_time>15000</ste_oya1_limit_time><ste_limit_time>10000</ste_limit_time><ste_reechi1_limit_time>15000</ste_reechi1_limit_time><naki_limit_time>8000</naki_limit_time><agari_limit_time>10000</agari_limit_time><naki_choice_limit_time>8000</naki_choice_limit_time><reechi_choice_limit_time>8000</reechi_choice_limit_time><last_cyoukou_limit_time>30000</last_cyoukou_limit_time><last_time>30000</last_time><gserv_url>/aog/</gserv_url><pay_mode>0</pay_mode><gmode>'.(int)($m['gmode']??1).'</gmode></entry>');
+    }
+
+    private function gchat(array $form): string
+    {
+        $tid=max(1,(int)($form['tid']??1));
+        $contents=(string)($form['contents']??'');
+        if($contents!=='') {
+            $this->postStamp($tid,(int)($form['mid']??0),(int)($form['pindex']??0),(string)($form['name']??''),$contents,(string)($form['param']??''));
+        }
+        return $this->xml($this->stampXml('chat',$tid,0));
+    }
+
+    private function ggetStampInfo(array $form): string
+    {
+        $must=$this->must($form);$tid=(int)($must[2]??$form['tid']??1);$pindex=(int)($must[3]??$form['pindex']??0);$mid=(int)($must[4]??$form['mid']??0);
+        $info=explode(',',(string)($form['stamp_info']??''));$since=(isset($info[1])&&$info[1]!=='')?(int)$info[1]:0;
+        if(isset($info[2])&&$info[2]!=='')$this->postStamp($tid,$mid,$pindex,(string)($info[3]??''),(string)$info[2],'');
+        return $this->xml($this->stampXml('stamp_info',$tid,$since));
+    }
+
+    private function postStamp(int $tid,int $mid,int $pindex,string $name,string $contents,string $param): void
+    {
+        $rows=$this->db->getKv('stamps',(string)$tid,[]);if(!is_array($rows))$rows=[];
+        $last=$rows?(int)($rows[count($rows)-1]['idx']??0):0;
+        $rows[]=['idx'=>$last+1,'time'=>time(),'mid'=>$mid,'pindex'=>$pindex,'name'=>$name,'contents'=>$contents,'param'=>$param];
+        if(count($rows)>40)$rows=array_slice($rows,-40);
+        $this->db->setKv('stamps',(string)$tid,$rows);
+    }
+
+    private function stampXml(string $tag,int $tid,int $since): string
+    {
+        $rows=$this->db->getKv('stamps',(string)$tid,[]);if(!is_array($rows))$rows=[];$body='<'.$tag.'>';
+        foreach($rows as $e){if((int)($e['idx']??0)<=$since)continue;$body.='<data><idx>'.(int)$e['idx'].'</idx><time>'.(int)($e['time']??0).'</time><mid>'.(int)($e['mid']??0).'</mid><pindex>'.(int)($e['pindex']??0).'</pindex><name>'.$this->x((string)($e['name']??'')).'</name><contents>'.$this->x((string)($e['contents']??'')).'</contents><param>'.$this->x((string)($e['param']??'')).'</param></data>';}
+        $last=$rows?(int)($rows[count($rows)-1]['idx']??0):0;
+        return $body.'<last_idx>'.$last.'</last_idx></'.$tag.'>';
+    }
+
+    private function presentDone(array $form): string
+    {
+        $ids=array_filter(array_map('trim',explode(',',(string)($form['done_ids']??''))),fn($v)=>$v!=='');$body='<present>';
+        foreach($ids as $id)$body.='<data><id>'.$this->x($id).'</id><success>1</success><content></content><amount>0</amount></data>';
+        return $this->xml($body.'</present>');
+    }
+
+    /** @return list<string> */
+    private function must(array $form):array {$raw=(string)($form['must']??'');return $raw===''?[]:array_map('trim',explode(',',$raw));}
+    private function infoData(string $kind,string $payload):string {return '<info_data kind="'.$this->x($kind).'">'.base64_encode($payload).'</info_data>';}
+    private function xml(string $inner=''):string {return '<?xml version="1.0" encoding="UTF-8"?><response>'.$inner.'</response>';}
+    private function x(string $s):string {return htmlspecialchars($s,ENT_QUOTES|ENT_XML1,'UTF-8');}
+}
