@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Mfg;
 
 use Mfg\Aog\Dispatcher as AogDispatcher;
+use Mfg\Aog\FeatureDispatcher;
 use Mfg\Eamuse\Dispatcher as EamuseDispatcher;
 use Mfg\Protocol\EamuseProtocol;
 use Mfg\Protocol\KBinXml;
@@ -34,9 +35,11 @@ final class App
     private function handleAog(string $path, string $body): void
     {
         parse_str($body, $form);
+        $form = is_array($form) ? $form : [];
         $name = trim(substr($path, strlen('/aog')), '/');
         if ($name === '') $name = trim((string)($_GET['f'] ?? ''), '/');
-        $xml = (new AogDispatcher($this->db))->dispatch($name, is_array($form) ? $form : []);
+        $feature = (new FeatureDispatcher($this->db))->dispatch($name, $form);
+        $xml = $feature ?? (new AogDispatcher($this->db))->dispatch($name, $form);
         http_response_code(200);
         header('Content-Type: text/xml; charset=utf-8');
         echo $xml;
