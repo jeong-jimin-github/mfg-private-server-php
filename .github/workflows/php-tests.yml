@@ -39,3 +39,5 @@ jobs:
         run: php tests/features_test.php
       - name: Misc AOG
         run: php tests/misc_test.php
+      - name: All AOG routes
+        run: php tests/aog_routes_test.php
