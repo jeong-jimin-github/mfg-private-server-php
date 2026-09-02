@@ -48,7 +48,18 @@ foreach ([true, false] as $compressed) {
     kb_ok($ips->textContent==='192.168.0.10 10.20.30.40','ip4 array value');
 }
 
-// Real cabinets use legacy Japanese encodings too.  Verify that both string
+// Reproduce the real facility ordering that exposed a decoder cursor bug:
+// variable string -> packed u8 -> variable string -> packed u8 -> ip4.  The
+// byte/word cursors must advance past each standalone variable-length block or
+// globalip is decoded from an older four-byte packing slot.
+$facilityLike='<?xml version="1.0" encoding="UTF-8"?><response><facility><location><type __type="u8">0</type><countryjname __type="str">日本</countryjname><accuracy __type="u8">0</accuracy></location><line><id __type="str">0</id><class __type="u8">1</class></line><portfw><globalip __type="ip4">127.0.0.1</globalip><globalport __type="u16">18080</globalport><privateport __type="u16">18080</privateport></portfw></facility></response>';
+$facilityDecoded=KBinXml::decode(KBinXml::encode($facilityLike,'UTF-8',true));
+$facilityDoc=kb_doc($facilityDecoded['xml']);
+kb_ok($facilityDoc->getElementsByTagName('class')->item(0)?->textContent==='1','facility-like packed u8 alignment');
+kb_ok($facilityDoc->getElementsByTagName('globalip')->item(0)?->textContent==='127.0.0.1','facility-like ip4 alignment');
+kb_ok($facilityDoc->getElementsByTagName('globalport')->item(0)?->textContent==='18080','facility-like u16 alignment');
+
+// Real cabinets use legacy Japanese encodings too. Verify that both string
 // payloads and attribute payloads survive the binary format in both node-name
 // modes, while the decoder reports the original kbin encoding metadata.
 $jpXml='<?xml version="1.0" encoding="UTF-8"?><call model="VFG:J:A:A:2025122300"><message method="get" area="東京都"><title __type="str">麻雀ファイトガール</title><notice __type="str">接続テスト成功</notice></message></call>';
@@ -67,4 +78,4 @@ foreach(['CP932','EUC-JP'] as $encoding){
     }
 }
 
-echo "kbin UTF-8/CP932/EUC-JP + IPv4 round-trip OK\n";
+echo "kbin UTF-8/CP932/EUC-JP + IPv4/alignment round-trip OK\n";
