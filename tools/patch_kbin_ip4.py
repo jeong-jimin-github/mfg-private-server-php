@@ -3,69 +3,33 @@ from pathlib import Path
 p = Path('src/Protocol/KBinXml.php')
 s = p.read_text(encoding='utf-8')
 
-old_decode = '''            if ($type === 10) {
-                $el->setAttribute('__size', (string)strlen($raw));
-                $el->nodeValue = bin2hex($raw);
-            } elseif ($type === 11) {
-                $raw = rtrim($raw, "\\0");
-                $el->nodeValue = self::toUtf8($raw, $encoding);
+old = '''            if ($isArray) {
+                $raw = substr($input, $dataPos, $total * $fmt['size']);
+                $dataPos += strlen($raw);
+                $dataPos = self::align4($dataPos);
             } else {
-                $values = self::unpackValues($raw, $fmt, $total);
-                $el->nodeValue = implode(' ', array_map(static fn($v) => is_float($v) ? number_format($v, 6, '.', '') : (string)$v, $values));
+                $raw = self::grabAligned($input, $dataPos, $bytePos, $wordPos, $fmt['size'], $total);
             }
 '''
-new_decode = '''            if ($type === 10) {
-                $el->setAttribute('__size', (string)strlen($raw));
-                $el->nodeValue = bin2hex($raw);
-            } elseif ($type === 11) {
-                $raw = rtrim($raw, "\\0");
-                $el->nodeValue = self::toUtf8($raw, $encoding);
-            } elseif ($type === 12) {
-                $ips = [];
-                for ($i=0; $i<$total; $i++) {
-                    $chunk = substr($raw, $i*4, 4);
-                    $ip = strlen($chunk) === 4 ? @inet_ntop($chunk) : false;
-                    if ($ip === false) throw new \\RuntimeException('Invalid kbin ip4 payload');
-                    $ips[] = $ip;
-                }
-                $el->nodeValue = implode(' ', $ips);
+new = '''            if ($isArray) {
+                $raw = substr($input, $dataPos, $total * $fmt['size']);
+                $dataPos += strlen($raw);
+                $dataPos = self::align4($dataPos);
+                // Variable-length/array payloads are emitted as standalone
+                // aligned blocks by encodeElement(), which also advances the
+                // byte/word packing cursors to the end of that block. Mirror
+                // that here or a following u8/u16 scalar can be read from an
+                // older reserved packing slot instead of the current dataPos.
+                $bytePos = max($bytePos, $dataPos);
+                $wordPos = max($wordPos, $dataPos);
             } else {
-                $values = self::unpackValues($raw, $fmt, $total);
-                $el->nodeValue = implode(' ', array_map(static fn($v) => is_float($v) ? number_format($v, 6, '.', '') : (string)$v, $values));
+                $raw = self::grabAligned($input, $dataPos, $bytePos, $wordPos, $fmt['size'], $total);
             }
 '''
 
-old_encode = '''            if ($id === 10) $raw = hex2bin(preg_replace('/\\s+/', '', $text) ?? '') ?: '';
-            elseif ($id === 11) $raw = self::fromUtf8($text, $encoding) . "\\0";
-            else {
-                $tokens = preg_split('/\\s+/', trim($text)) ?: [];
-                if ($tokens === ['']) $tokens = [];
-                $raw = self::packValues($tokens, $fmt);
-            }
-'''
-new_encode = '''            if ($id === 10) $raw = hex2bin(preg_replace('/\\s+/', '', $text) ?? '') ?: '';
-            elseif ($id === 11) $raw = self::fromUtf8($text, $encoding) . "\\0";
-            elseif ($id === 12) {
-                $tokens = preg_split('/\\s+/', trim($text)) ?: [];
-                if ($tokens === ['']) $tokens = [];
-                $raw = '';
-                foreach ($tokens as $token) {
-                    $packed = @inet_pton($token);
-                    if ($packed === false || strlen($packed) !== 4) throw new \\RuntimeException('Invalid IPv4 address: ' . $token);
-                    $raw .= $packed;
-                }
-            } else {
-                $tokens = preg_split('/\\s+/', trim($text)) ?: [];
-                if ($tokens === ['']) $tokens = [];
-                $raw = self::packValues($tokens, $fmt);
-            }
-'''
+count = s.count(old)
+if count != 1:
+    raise SystemExit(f'alignment patch anchor count={count}')
 
-if s.count(old_decode) != 1:
-    raise SystemExit(f'decode patch anchor count={s.count(old_decode)}')
-if s.count(old_encode) != 1:
-    raise SystemExit(f'encode patch anchor count={s.count(old_encode)}')
-
-s = s.replace(old_decode, new_decode).replace(old_encode, new_encode)
-p.write_text(s, encoding='utf-8')
-print('patched KBin ip4 encode/decode')
+p.write_text(s.replace(old, new), encoding='utf-8')
+print('patched KBin variable-data alignment cursors')
