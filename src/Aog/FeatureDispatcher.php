@@ -25,7 +25,7 @@ final class FeatureDispatcher
             'gacha_info'=>$this->gachaInfo(),
             'req_draw_gacha'=>$this->reqDrawGacha($form),
             'get_gacha_result'=>$this->getGachaResult($form),
-            'gacha_log'=>$this->xml(),
+            'gacha_log'=>$this->logOnly($form,'gacha'),
             'music_gacha_play_reserve'=>$this->musicReserve($form),
             'music_gacha_play'=>$this->musicPlay($form),
             default=>null,
@@ -108,6 +108,13 @@ final class FeatureDispatcher
     private function musicPlay(array $form): string
     {
         $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('music_gacha',$pcuid,['series'=>91]);$series=(int)($row['series']??91);$pool=GachaPools::poolForSeries($series);if(!$pool)$pool=GachaPools::poolForSeries(91);$oid=$pool[random_int(0,count($pool)-1)];$this->db->deleteKv('music_gacha',$pcuid);return $this->xml('<gacha_result><is_success>1</is_success><gain_items><item>'.$this->x($oid).'</item></gain_items><gift>2</gift><fight_spirits></fight_spirits></gacha_result>');
+    }
+
+    /** @param array<string,mixed> $form */
+    private function logOnly(array $form,string $label): string
+    {
+        TelemetryLog::write($form,$label);
+        return $this->xml();
     }
 
     /** @return array{0:string,1:array<string,mixed>} */
