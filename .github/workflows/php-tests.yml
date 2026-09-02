@@ -49,6 +49,8 @@ jobs:
         run: php tests/cpu_ai_test.php
       - name: Live Table CPU AI
         run: php tests/table_cpu_integration_test.php
+      - name: Multi ron
+        run: php tests/multi_ron_test.php
       - name: Match stream
         run: php tests/match_test.php
       - name: Calls and wins
