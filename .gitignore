@@ -1,0 +1,6 @@
+/data/*.sqlite
+/data/*.sqlite-*
+/logs/
+/captures/
+/config.local.php
+.env
