@@ -34,7 +34,7 @@ final class Dispatcher
             in_array($module, ['cardmng','vfgcard'], true) => $this->cardmng($module, $method, $root),
             $module === 'eacoin' => $this->eacoin($method, $root),
             $module === 'vfgac' => $this->vfgac($method),
-            $module === 'vfglog' => $this->wrap('vfglog', ''),
+            $module === 'vfglog' => $this->vfglog($method, $root),
             in_array($module, ['posevent','pkglist','userdata','userid','sidmgr','netlog','local','local2'], true) => $this->wrap($module, ''),
             default => $this->wrap($module !== '' ? $module : 'eamuse', ''),
         };
@@ -191,6 +191,25 @@ final class Dispatcher
             return $this->wrap('eacoin', '<topic><sumdate __type="str">0</sumdate></topic>');
         }
         return $this->wrap('eacoin', '');
+    }
+
+    private function vfglog(string $method, ?SimpleXMLElement $root): string
+    {
+        if ($method === 'put_msg' && $root) {
+            $nodes = $root->xpath('//msg') ?: [];
+            foreach ($nodes as $msg) {
+                $label = trim((string)($msg['label'] ?? '?'));
+                if ($label === '') $label = '?';
+                $value = trim((string)$msg);
+                if (strlen($value) > 500) $value = substr($value, 0, 500);
+                if ($label === 'network_error') {
+                    error_log('[MFG][client][ERROR] network_error: ' . $value);
+                } else {
+                    error_log('[MFG][client] ' . $label . ': ' . $value);
+                }
+            }
+        }
+        return $this->wrap('vfglog', '');
     }
 
     private function findModuleNode(?SimpleXMLElement $root, string $name): ?SimpleXMLElement
