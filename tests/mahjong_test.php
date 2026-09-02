@@ -21,7 +21,8 @@ $kokushi[] = $kokushi[0];
 if (!M::isAgari(M::countsOf($kokushi))) throw new RuntimeException('kokushi agari failed');
 
 if (count(M::buildWall(M::SANMA, 1)) !== 108) throw new RuntimeException('sanma wall size');
-if (count(M::buildWall(M::NIMA, 1)) !== 72) throw new RuntimeException('nima wall size');
+// NIMA removes all nine manzu kinds plus west/north: (34 - 11) * 4 = 92.
+if (count(M::buildWall(M::NIMA, 1)) !== 92) throw new RuntimeException('nima wall size');
 if (M::doraFromIndicator(M::HON + 1, M::NIMA) !== M::HON) throw new RuntimeException('nima wind dora cycle');
 
 echo "mahjong core OK\n";
