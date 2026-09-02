@@ -77,24 +77,27 @@ final class FeatureDispatcher
 
     private function reqDrawGacha(array $form): string
     {
+        // Python reference only records transaction metadata here. The actual
+        // response rows are generated later from get_gacha_result.times.
         $pcuid=(string)($form['pcuid']??'GUEST');
-        $series=(int)($form['series_id']??$form['gacha_id']??0);
-        if(isset($form['gacha_name'])&&trim((string)$form['gacha_name'])!=='')$series=GachaPools::seriesIdByName((string)$form['gacha_name'])??$series;
-        $count=max(1,min(10,(int)($form['times']??$form['count']??1)));
-        $pool=GachaPools::poolForSeries($series);if(!$pool)$pool=GachaPools::poolForSeries(0);$draw=[];
-        for($i=0;$i<$count;$i++)$draw[]=$pool[random_int(0,count($pool)-1)];
-        $entry=GachaPools::seriesEntry($series);$custom=GachaPools::customPickupItems($series);
-        if(($entry['type']??'')==='Unlock'&&$custom&&random_int(1,100)<=10)$draw[0]=$custom[0];
-        $token=bin2hex(random_bytes(8));$this->db->setKv('gacha',$pcuid,['token'=>$token,'series'=>$series,'items'=>$draw,'time'=>time()]);
+        $times=(int)($form['times']??1);if($times===0)$times=1;
+        $token=bin2hex(random_bytes(8));
+        $this->db->setKv('gacha',$pcuid,[
+            'id'=>$token,
+            'gacha'=>(string)($form['gacha_name']??''),
+            'times'=>$times,
+            'time'=>time(),
+        ]);
         return $this->xml('<transaction_info><transaction_id>'.$token.'</transaction_id></transaction_info>');
     }
 
     private function getGachaResult(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('gacha',$pcuid,['items'=>[]]);$items=is_array($row['items']??null)?$row['items']:[];
-        $requested=max(1,min(10,(int)($form['times']??0)));if(!$items&&$requested>0)$items=array_fill(0,$requested,'');
+        $times=(int)($form['times']??1);if($times===0)$times=1;$count=max(1,$times);
         $body='<lottery_result>';
-        foreach($items as $oid)$body.='<data><character_id>0</character_id><unique_id>'.$this->x(substr(hash('sha256',(string)$oid.random_int(1,PHP_INT_MAX)),0,12)).'</unique_id></data>';
+        for($i=0;$i<$count;$i++){
+            $body.='<data><character_id>0</character_id><unique_id>'.substr(bin2hex(random_bytes(8)),0,12).'</unique_id></data>';
+        }
         return $this->xml($body.'</lottery_result><gift><acquired>0</acquired><prev>0</prev><after>0</after></gift>');
     }
 
