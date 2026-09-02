@@ -31,6 +31,11 @@ final class MiscDispatcher
         };
     }
 
+    public function stampXml(string $tag,int $tid,int $since=0): string
+    {
+        return (new StampStore($this->db))->xml($tag,$tid,$since);
+    }
+
     private function reconnect(array $form): string
     {
         $pcuid=(string)($form['pcuid']??'GUEST');
@@ -44,7 +49,7 @@ final class MiscDispatcher
         $tid=max(1,(int)($form['tid']??1));
         $contents=(string)($form['contents']??'');
         if($contents!=='') {
-            $this->postStamp($tid,(int)($form['mid']??0),(int)($form['pindex']??0),(string)($form['name']??''),$contents,(string)($form['param']??''));
+            (new StampStore($this->db))->post($tid,(int)($form['mid']??0),(int)($form['pindex']??0),(string)($form['name']??''),$contents,(string)($form['param']??''));
         }
         return $this->xml($this->stampXml('chat',$tid,0));
     }
@@ -53,25 +58,8 @@ final class MiscDispatcher
     {
         $must=$this->must($form);$tid=(int)($must[2]??$form['tid']??1);$pindex=(int)($must[3]??$form['pindex']??0);$mid=(int)($must[4]??$form['mid']??0);
         $info=explode(',',(string)($form['stamp_info']??''));$since=(isset($info[1])&&$info[1]!=='')?(int)$info[1]:0;
-        if(isset($info[2])&&$info[2]!=='')$this->postStamp($tid,$mid,$pindex,(string)($info[3]??''),(string)$info[2],'');
+        if(isset($info[2])&&$info[2]!=='')(new StampStore($this->db))->post($tid,$mid,$pindex,(string)($info[3]??''),(string)$info[2],'');
         return $this->xml($this->stampXml('stamp_info',$tid,$since));
-    }
-
-    private function postStamp(int $tid,int $mid,int $pindex,string $name,string $contents,string $param): void
-    {
-        $rows=$this->db->getKv('stamps',(string)$tid,[]);if(!is_array($rows))$rows=[];
-        $last=$rows?(int)($rows[count($rows)-1]['idx']??0):0;
-        $rows[]=['idx'=>$last+1,'time'=>time(),'mid'=>$mid,'pindex'=>$pindex,'name'=>$name,'contents'=>$contents,'param'=>$param];
-        if(count($rows)>40)$rows=array_slice($rows,-40);
-        $this->db->setKv('stamps',(string)$tid,$rows);
-    }
-
-    private function stampXml(string $tag,int $tid,int $since): string
-    {
-        $rows=$this->db->getKv('stamps',(string)$tid,[]);if(!is_array($rows))$rows=[];$body='<'.$tag.'>';
-        foreach($rows as $e){if((int)($e['idx']??0)<=$since)continue;$body.='<data><idx>'.(int)$e['idx'].'</idx><time>'.(int)($e['time']??0).'</time><mid>'.(int)($e['mid']??0).'</mid><pindex>'.(int)($e['pindex']??0).'</pindex><name>'.$this->x((string)($e['name']??'')).'</name><contents>'.$this->x((string)($e['contents']??'')).'</contents><param>'.$this->x((string)($e['param']??'')).'</param></data>';}
-        $last=$rows?(int)($rows[count($rows)-1]['idx']??0):0;
-        return $body.'<last_idx>'.$last.'</last_idx></'.$tag.'>';
     }
 
     private function presentDone(array $form): string
