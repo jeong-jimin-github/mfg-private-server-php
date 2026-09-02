@@ -35,7 +35,8 @@ $r=new SimpleXMLElement($decoded['xml']);
 $f=$r->facility;
 hf_ok(isset($f)&&(string)$f['status']==='0','facility status');
 hf_ok((string)$f->portfw->globalip['__type']==='ip4','facility globalip type');
-hf_ok((string)$f->portfw->globalip==='127.0.0.1','facility globalip value');
+$globalIp=(string)$f->portfw->globalip;
+hf_ok($globalIp==='127.0.0.1','facility globalip value: '.var_export($globalIp,true));
 hf_ok((string)$f->portfw->globalport==='18080'&&(string)$f->portfw->privateport==='18080','facility ports');
 hf_ok((string)$f->location->regionjname==='東京都','facility Japanese KBin text');
 
