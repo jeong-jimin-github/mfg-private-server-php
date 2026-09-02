@@ -19,6 +19,8 @@ jobs:
           extensions: dom, simplexml, pdo_sqlite, mbstring
       - name: Syntax check
         run: find src public tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: SQLite database
+        run: php tests/database_test.php
       - name: Protocol
         run: php tests/protocol_test.php
       - name: KBin
@@ -45,3 +47,31 @@ jobs:
         run: php tests/misc_test.php
       - name: All AOG routes
         run: php tests/aog_routes_test.php
+
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: mfg
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql
+      - name: MySQL database
+        env:
+          TEST_DB_DSN: mysql:host=127.0.0.1;port=3306;dbname=mfg;charset=utf8mb4
+          TEST_DB_USER: root
+          TEST_DB_PASS: root
+        run: php tests/database_test.php
