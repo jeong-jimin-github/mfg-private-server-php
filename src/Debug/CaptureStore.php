@@ -45,7 +45,7 @@ final class CaptureStore
     /** @param array<string,mixed> $meta */
     public function saveJson(string $kind,string $name,array $meta): ?string
     {
-        return $this->saveText($kind,$name,json_encode($meta,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR).'\n','json');
+        return $this->saveText($kind,$name,json_encode($meta,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)."\n",'json');
     }
 
     private function nextSeq(): int
