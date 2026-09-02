@@ -54,6 +54,8 @@ final class FeatureDispatcher
 
     public function dispatch(string $name,array $form): ?string
     {
+        $misc=(new MiscDispatcher($this->db))->dispatch($name,$form);
+        if($misc!==null)return $misc;
         return match($name) {
             'dojo_get_status'=>$this->dojoGetStatus($form),
             'dojo_set_slot'=>$this->dojoSetSlot($form),
