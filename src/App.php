@@ -7,6 +7,7 @@ namespace Mfg;
 use Mfg\Aog\Dispatcher as AogDispatcher;
 use Mfg\Aog\FeatureDispatcher;
 use Mfg\Aog\MiscDispatcher;
+use Mfg\Debug\CaptureStore;
 use Mfg\Eamuse\Dispatcher as EamuseDispatcher;
 use Mfg\Protocol\EamuseProtocol;
 use Mfg\Protocol\KBinXml;
@@ -49,11 +50,19 @@ final class App
         $form = is_array($form) ? $form : [];
         $name = trim(substr($path, strlen('/aog')), '/');
         if ($name === '') $name = trim((string)($_GET['f'] ?? ''), '/');
+        $captureName='aog_'.($name!==''?$name:'root');
+        $pairs=[];
+        foreach($form as $k=>$v){
+            $pairs[]=(string)$k.'='.(is_scalar($v)||(is_object($v)&&method_exists($v,'__toString'))?(string)$v:json_encode($v,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+        }
+        $this->captureText('requests',$captureName,'PATH '.$path."\n".implode('&',$pairs));
+
         $feature = (new FeatureDispatcher($this->db))->dispatch($name, $form);
         $xml = $feature ?? (new AogDispatcher($this->db))->dispatch($name, $form);
         if (in_array($name, ['gget','gpost'], true) && !str_contains($xml, '<chat')) {
             $xml = $this->appendMatchChat($xml, $name, $form);
         }
+        $this->captureText('responses',$captureName,$xml);
         http_response_code(200);
         header('Content-Type: text/xml; charset=utf-8');
         echo $xml;
@@ -77,6 +86,7 @@ final class App
         $info = EamuseProtocol::parseEamuseInfo($_SERVER['HTTP_X_EAMUSE_INFO'] ?? null);
         $compress = $_SERVER['HTTP_X_COMPRESS'] ?? 'none';
         $decoded = EamuseProtocol::decodeTransport($wireBody, $info, $compress);
+        $decodedTransport=$decoded;
 
         $usedKbin = false;
         $kbinEncoding = 'UTF-8';
@@ -94,7 +104,15 @@ final class App
         }
 
         if (!str_starts_with(ltrim($decoded), '<')) {
+            $this->captureBinary('transport','eamuse_decode_failed',$decodedTransport);
+            $this->captureJson('transport','eamuse_decode_failed',[
+                'x_eamuse_info'=>$info,'x_compress'=>$compress,'used_kbin'=>$usedKbin,
+                'kbin_encoding'=>$kbinEncoding,'kbin_compressed'=>$kbinCompressed,
+                'wire_bytes'=>strlen($wireBody),'decoded_bytes'=>strlen($decodedTransport),
+            ]);
             $fallback = $this->eamuseWrap('eamuse', '');
+            $this->captureText('requests','unknown',$decoded,'xml');
+            $this->captureText('responses','unknown',$fallback,'xml');
             if ($usedKbin) {
                 try { $fallback = KBinXml::encode($fallback, $kbinEncoding, $kbinCompressed); } catch (\Throwable) {}
             }
@@ -123,8 +141,20 @@ final class App
             $method = $qMethod;
         }
 
-        $response = (new EamuseDispatcher($this->db, $this->baseUrl()))
+        $reqName=trim($module.'_'.$method,'_');if($reqName==='')$reqName='unknown';
+        $this->captureText('requests',$reqName,$decoded);
+        $this->captureBinary('transport',$reqName,$decodedTransport);
+        $this->captureJson('transport',$reqName,[
+            'x_eamuse_info'=>$info,'x_compress'=>$compress,'used_kbin'=>$usedKbin,
+            'kbin_encoding'=>$kbinEncoding,'kbin_compressed'=>$kbinCompressed,
+            'wire_bytes'=>strlen($wireBody),'decoded_bytes'=>strlen($decodedTransport),
+            'model'=>$model,'module'=>$module,'method'=>$method,
+        ]);
+
+        $responseXml = (new EamuseDispatcher($this->db, $this->baseUrl()))
             ->dispatch($model, $module, $method, $root === false ? null : $root);
+        $this->captureText('responses',$reqName,$responseXml);
+        $response=$responseXml;
 
         if ($usedKbin) {
             try {
@@ -134,6 +164,22 @@ final class App
             }
         }
         $this->sendBinary(EamuseProtocol::encodeTransport($response, $info, $compress), $info, $compress);
+    }
+
+    private function captureText(string $kind,string $name,string $body,string $ext='xml'): void
+    {
+        try{(new CaptureStore())->saveText($kind,$name,$body,$ext);}catch(\Throwable $e){error_log('[MFG] capture write failed: '.$e->getMessage());}
+    }
+
+    private function captureBinary(string $kind,string $name,string $body): void
+    {
+        try{(new CaptureStore())->saveBinary($kind,$name,$body);}catch(\Throwable $e){error_log('[MFG] capture write failed: '.$e->getMessage());}
+    }
+
+    /** @param array<string,mixed> $meta */
+    private function captureJson(string $kind,string $name,array $meta): void
+    {
+        try{(new CaptureStore())->saveJson($kind,$name,$meta);}catch(\Throwable $e){error_log('[MFG] capture write failed: '.$e->getMessage());}
     }
 
     private function eamuseWrap(string $module, string $inner, string $status = '0'): string
