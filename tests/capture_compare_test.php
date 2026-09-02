@@ -22,7 +22,7 @@ file_put_contents($a.'/transport/0002_services_get.json',json_encode($meta));$me
 
 $c=new CaptureComparator();$struct=$c->compare($a,$b,false);
 cc_ok($struct['reference_files']===1&&$struct['candidate_files']===1&&$struct['compared']===1,'compare counts');
-cc_ok($struct['differences']===[],'structural compare should ignore dynamic values/wire size');
+cc_ok($struct['differences']===[],'structural compare should ignore dynamic values/wire size: '.json_encode($struct['differences'],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE));
 $strict=$c->compare($a,$b,true);cc_ok($strict['differences']!==[],'strict value comparison should notice values');
 
 file_put_contents($b.'/responses/0004_services_get.xml','<response><services status="0"><value __type="s8">1</value></services></response>');
