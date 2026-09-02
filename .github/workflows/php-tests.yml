@@ -51,6 +51,8 @@ jobs:
         run: php tests/table_cpu_integration_test.php
       - name: Multi ron
         run: php tests/multi_ron_test.php
+      - name: Gacha pools
+        run: php tests/gacha_pools_test.php
       - name: Match stream
         run: php tests/match_test.php
       - name: Calls and wins
