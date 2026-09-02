@@ -7,6 +7,7 @@ namespace Mfg;
 use Mfg\Aog\Dispatcher as AogDispatcher;
 use Mfg\Eamuse\Dispatcher as EamuseDispatcher;
 use Mfg\Protocol\EamuseProtocol;
+use Mfg\Protocol\KBinXml;
 use Mfg\Storage\Database;
 
 final class App
@@ -47,8 +48,27 @@ final class App
         $compress = $_SERVER['HTTP_X_COMPRESS'] ?? 'none';
         $decoded = EamuseProtocol::decodeTransport($wireBody, $info, $compress);
 
+        $usedKbin = false;
+        $kbinEncoding = 'UTF-8';
+        $kbinCompressed = true;
+        if (KBinXml::isBinary($decoded)) {
+            try {
+                $meta = KBinXml::decode($decoded);
+                $decoded = $meta['xml'];
+                $usedKbin = true;
+                $kbinEncoding = $meta['encoding'];
+                $kbinCompressed = $meta['compressed'];
+            } catch (\Throwable $e) {
+                error_log('[MFG] kbin decode failed: ' . $e->getMessage());
+            }
+        }
+
         if (!str_starts_with(ltrim($decoded), '<')) {
-            $this->sendBinary(EamuseProtocol::encodeTransport($this->eamuseWrap('eamuse', ''), $info, $compress), $info, $compress);
+            $fallback = $this->eamuseWrap('eamuse', '');
+            if ($usedKbin) {
+                try { $fallback = KBinXml::encode($fallback, $kbinEncoding, $kbinCompressed); } catch (\Throwable) {}
+            }
+            $this->sendBinary(EamuseProtocol::encodeTransport($fallback, $info, $compress), $info, $compress);
             return;
         }
 
@@ -75,6 +95,14 @@ final class App
 
         $response = (new EamuseDispatcher($this->db, $this->baseUrl()))
             ->dispatch($model, $module, $method, $root === false ? null : $root);
+
+        if ($usedKbin) {
+            try {
+                $response = KBinXml::encode($response, $kbinEncoding, $kbinCompressed);
+            } catch (\Throwable $e) {
+                error_log('[MFG] kbin encode failed, returning XML: ' . $e->getMessage());
+            }
+        }
         $this->sendBinary(EamuseProtocol::encodeTransport($response, $info, $compress), $info, $compress);
     }
 
