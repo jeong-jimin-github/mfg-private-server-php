@@ -76,8 +76,6 @@ foreach(['/health','/status'] as $statusPath){
 ht_ok(isset($services->services)&&(string)$services->services['status']==='0','services.get over HTTP');
 ht_ok(isset($services->services->item),'services.get empty');
 
-// Strict mode must quarantine the malformed Spice/KAMUNITY card shape over the
-// real web stack, not only when Dispatcher is called directly.
 $garbled="\u{E09B}ﾞ";
 [$card]=ht_eamuse($base,'<call model="VFG:J:A:A:2025122300"><cardmng method="inquire" cardid="'.htmlspecialchars($garbled,ENT_QUOTES|ENT_XML1,'UTF-8').'" cardtype="2104083072"/></call>');
 ht_ok(isset($card->cardmng)&&(string)$card->cardmng['status']==='112','malformed card HTTP quarantine');
@@ -96,7 +94,6 @@ $aogXml=new SimpleXMLElement($aog);
 ht_ok($aogXml->getName()==='root'&&(string)$aogXml->serv_st->code==='0','AOG HTTP root/serv_st');
 ht_ok(isset($aogXml->boot_mes)&&str_ends_with((string)$aogXml->boot_mes->moserv_url,'/aog'),'AOG appli_boot HTTP payload');
 
-// Independent HTTP requests must see the same persisted session/profile state.
 [$loginBody]=ht_request(
     $base.'/aog/login','POST',http_build_query(['user_id'=>'HTTP-E2E','guest'=>'0']),
     ['Content-Type: application/x-www-form-urlencoded']
@@ -117,9 +114,6 @@ $read=new SimpleXMLElement($readBody);
 ht_ok(isset($read->state->data),'AOG HTTP state read missing');
 ht_ok(base64_decode((string)$read->state->data,true)===$literal,'AOG HTTP cross-request state mismatch');
 
-// Python's game handlers append the in-match sticker stream to both gget and
-// gpost. Verify the public PHP response does the same, including original d
-// attributes/children and the empty gpost chat cursor response.
 foreach(['TableSticker001','TableSticker002'] as $sticker){
     ht_request(
         $base.'/aog/gchat','POST',
@@ -146,4 +140,48 @@ $mustPost='VFG:J:A:A:2025122300/HTTPCHAT/9/0/1/0/0/0/0/0/0/0/0/0/0';
 $gpost=new SimpleXMLElement($gpostBody);ht_ok(isset($gpost->chat),'gpost chat node missing');
 ht_ok(count($gpost->chat->d)===0,'gpost should use an exhausted chat cursor');
 
-echo "real HTTP RC4/LZ77/KBin/AOG/chat integration OK\n";
+// Mirror Python test_integration.py: every advertised GAME_HANDLERS endpoint must
+// survive the real HTTP/public-index stack and return parser-safe root/serv_st.
+$routes=[
+'appli_boot','appli_info','login','logout','create_player','get_menudata','keep_alive',
+'client_state_read','client_state_write','entry_game','gget','gpost','end_game','kiken_game',
+'end_show','reconnect','chk_tabooword','dojo_get_status','dojo_set_slot','dojo_gain_soul',
+'gacha_info','gacha_log','req_draw_gacha','get_gacha_result','music_gacha_play',
+'music_gacha_play_reserve','gchat','gget_stamp_info','player_record','get_record',
+'get_haifu_list','get_haifu_data','get_jongstone_info','get_mg','mission_date','present_done',
+'competition_entry','item_gain_log','item_consume_log','notice_done','important_notice_done',
+'set_favorite_character','odekake_done','coop_done','eashop_done'
+];
+$common=['pcuid'=>$sid,'mid'=>'1','gmode'=>'4','name'=>'TEST','kind'=>'profile','data'=>base64_encode('round-trip-state'),'must'=>implode('/',array_fill(0,20,'0'))];
+$forms=[
+'create_player'=>['user_id'=>'HTTP-E2E','name'=>'TEST'],
+'get_menudata'=>['pcuid'=>$sid],
+'client_state_read'=>['pcuid'=>$sid],
+'client_state_write'=>['pcuid'=>$sid,'kind'=>'test','data'=>base64_encode('ok')],
+'entry_game'=>['pcuid'=>$sid,'gmode'=>'1'],
+'gget'=>['pcuid'=>$sid,'ready'=>'0'],
+'gpost'=>['pcuid'=>$sid,'kind'=>'0'],
+'end_game'=>['pcuid'=>$sid], 'kiken_game'=>['pcuid'=>$sid],
+'end_show'=>['voltage'=>'100','contribute_percent'=>'100','bonus'=>'0'],
+'reconnect'=>['pcuid'=>$sid], 'chk_tabooword'=>['str'=>'TEST'],
+'dojo_get_status'=>['pcuid'=>$sid],
+'dojo_set_slot'=>['pcuid'=>$sid,'slot_id'=>'0','set_character'=>'OID_CHARACTER_1'],
+'dojo_gain_soul'=>['pcuid'=>$sid,'slot_id'=>'0'],
+'req_draw_gacha'=>['pcuid'=>$sid,'gacha_id'=>'0','count'=>'1'],
+'get_gacha_result'=>['pcuid'=>$sid],
+'music_gacha_play_reserve'=>['pcuid'=>$sid,'gacha_id'=>'91'],
+'music_gacha_play'=>['pcuid'=>$sid],
+'gchat'=>['tid'=>'1','mid'=>'1','pindex'=>'0','name'=>'TEST','contents'=>'TableSticker001'],
+'gget_stamp_info'=>['must'=>'0/0/1/0/1','stamp_info'=>'0,0,,'],
+'present_done'=>['done_ids'=>'1,2'],
+'competition_entry'=>['pcuid'=>$sid],
+];
+foreach($routes as $route){
+    $form=array_merge($common,$forms[$route]??[]);
+    [$body]=ht_request($base.'/aog/'.$route,'POST',http_build_query($form),['Content-Type: application/x-www-form-urlencoded']);
+    $root=new SimpleXMLElement($body);
+    ht_ok($root->getName()==='root',$route.' HTTP root');
+    ht_ok(isset($root->serv_st->code)&&(string)$root->serv_st->code==='0',$route.' HTTP serv_st');
+}
+
+echo 'real HTTP integration OK: '.count($routes)." AOG routes + RC4/LZ77/KBin/card/eacoin/chat/state\n";
