@@ -9,6 +9,12 @@ final class GachaPools
     /** @var array<string,mixed>|null */
     private static ?array $data = null;
 
+    /** The exact 27-series default advertised by the Python reference. */
+    private const CURATED_IDS = [
+        0,1,25,44,56,63,74,101,125,135,
+        91,92,107,114,132,133,124,128,129,130,131,134,136,137,138,139,140,
+    ];
+
     /** @return array<string,mixed> */
     public static function data(): array
     {
@@ -30,11 +36,34 @@ final class GachaPools
         return is_array($s) ? $s : [];
     }
 
+    /** @return array<string,array<string,mixed>> */
+    public static function advertisedSeries(): array
+    {
+        $all=self::series();
+        $flag=strtolower(trim((string)(getenv('VFG_GACHA_ALL')?:'')));
+        if(in_array($flag,['1','true','yes','on'],true))return $all;
+        $out=[];
+        foreach(self::CURATED_IDS as $id){
+            $key=(string)$id;
+            if(isset($all[$key])&&is_array($all[$key]))$out[$key]=$all[$key];
+        }
+        return $out;
+    }
+
     /** @return array<string,mixed> */
     public static function seriesEntry(int $id): array
     {
         $entry = self::series()[(string)$id] ?? [];
         return is_array($entry) ? $entry : [];
+    }
+
+    public static function seriesIdByName(string $name): ?int
+    {
+        $name=trim($name);if($name==='')return null;
+        foreach(self::series() as $id=>$entry){
+            if(is_array($entry)&&(string)($entry['name']??'')===$name)return (int)$id;
+        }
+        return null;
     }
 
     /** @return list<string> */
@@ -55,7 +84,10 @@ final class GachaPools
     /** @return list<string> */
     public static function pickupCharas(int $id): array
     {
-        return self::strings(self::seriesEntry($id)['pickup_charas'] ?? []);
+        $charas=self::strings(self::seriesEntry($id)['pickup_charas'] ?? []);
+        $entry=self::seriesEntry($id);
+        if(($entry['type']??'')==='Pickup'&&!$charas&&!self::customPickupItems($id))return ['Chara01'];
+        return $charas;
     }
 
     /** @return list<string> */
