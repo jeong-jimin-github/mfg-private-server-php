@@ -120,6 +120,11 @@ jobs:
           extensions: dom, simplexml, pdo_sqlite, mbstring
       - name: All 23 game modes soak
         run: php tests/all_modes_soak_test.php
+      - name: Multi-seed representative soak
+        run: |
+          for seed in 0x61000000 0x62000000 0x63000000; do
+            SOAK_MODES=1,3,4,6,20,23 SOAK_SEED_BASE="$seed" php tests/all_modes_soak_test.php
+          done
 
   mysql:
     runs-on: ubuntu-latest
