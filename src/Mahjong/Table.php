@@ -7,8 +7,8 @@ namespace Mfg\Mahjong;
 final class Table
 {
     public const K_TSUMO=1,K_SUTEHAI=2,K_TSUMOAGARI=3,K_RON=4,K_RYUKYOKU=5,K_PON=6,K_CHI=7,K_ANKAN=8,K_MINKAN=9,K_KAKAN=10,K_TSUMOCHOICES=15,K_SUTECHOICES=16,K_KYOKUSTART=17,K_KYOKUEND=23,K_SCORERANK=24;
-    public const S_SUTE_PAI=2,S_TSUMO_AGARI=3,S_RON_AGARI=4,S_PON=5,S_CHI=6,S_ANKAN=7,S_MINKAN=8,S_KAKAN=9,S_NAKINASHI=11,S_NEXT_KYOKU_READY=15;
-    public const F_PON=0x2,F_CHI=0x4,F_KAN=0x8,F_TSUMOAGARI=0x40,F_RON=0x80,F_REACH=0x200,F_SUTE=0x400;
+    public const S_SUTE_PAI=2,S_TSUMO_AGARI=3,S_RON_AGARI=4,S_PON=5,S_CHI=6,S_ANKAN=7,S_MINKAN=8,S_KAKAN=9,S_KYUSYUKYUHAI=10,S_NAKINASHI=11,S_NEXT_KYOKU_READY=15;
+    public const F_PON=0x2,F_CHI=0x4,F_KAN=0x8,F_TSUMOAGARI=0x40,F_RON=0x80,F_KYUSYU=0x100,F_REACH=0x200,F_SUTE=0x400;
 
     /** @param array<string,mixed> $s */
     public function __construct(private array $s){$this->normalize();}
@@ -85,6 +85,7 @@ final class Table
         if($kind===self::S_SUTE_PAI){$idx=Mahjong::paiToIdx($pai);if($idx<0||!in_array($idx,$this->s['hands'][$pindex]??[],true))$idx=(int)($this->s['drawn'][$pindex]??($this->s['hands'][$pindex][count($this->s['hands'][$pindex])-1]??-1));if($idx>=0)$this->discard($pindex,$idx,$reach!==0,$tsumogiri!==0);return;}
         if($kind===self::S_TSUMO_AGARI){$this->applyTsumo($seat);return;}
         if($kind===self::S_RON_AGARI){$ctx=$this->s['call_ctx'];if(is_array($ctx))$this->applyRon($seat,(int)$ctx['discarder'],(int)$ctx['tile'],!empty($ctx['chankan']));return;}
+        if($kind===self::S_KYUSYUKYUHAI){$this->s['pending_choices']=null;if($this->kyuushuOk($seat))$this->ryuukyoku(true);return;}
         if($kind===self::S_NAKINASHI){
             $ctx=$this->s['call_ctx'];$this->s['call_ctx']=null;$this->s['state']='discard';
             if(is_array($ctx)){
@@ -130,7 +131,8 @@ final class Table
     {
         $flags=self::F_SUTE;if($this->winResult($seat,(int)$this->s['drawn'][$seat],true)!==null)$flags|=self::F_TSUMOAGARI;
         if(empty($this->s['riichi'][$seat])&&count($this->s['melds'][$seat])===0&&(int)$this->s['scores'][$seat]>=1000&&count($this->s['wall'])>=4&&$this->canReach($seat))$flags|=self::F_REACH;
-        $kans=$this->ankanOptions($seat);if($kans)$flags|=self::F_KAN;$this->s['pending_choices']=['seat'=>$seat,'flags'=>$flags,'kans'=>$kans];$this->s['state']='discard';
+        $kans=$this->ankanOptions($seat);if($kans)$flags|=self::F_KAN;if($this->kyuushuOk($seat))$flags|=self::F_KYUSYU;
+        $this->s['pending_choices']=['seat'=>$seat,'flags'=>$flags,'kans'=>$kans];$this->s['state']='discard';
     }
 
     private function cpuTurn(int $seat):void
@@ -258,22 +260,23 @@ final class Table
     }
 
     /** @param list<int> $winners */
-    private function finishKyoku(array $winners,bool $draw,array $tenpai=[]):void
+    private function finishKyoku(array $winners,bool $draw,array $tenpai=[],bool $abortive=false):void
     {
-        $next=RoundSettlement::nextState($this->oya(),$winners,$tenpai,$draw,false,(int)$this->s['honba'],(int)$this->s['kyoku_index'],Mahjong::KYOKU_COUNT[(int)$this->s['taku']],$this->s['scores'],(int)$this->s['seats']);
+        $next=RoundSettlement::nextState($this->oya(),$winners,$tenpai,$draw,$abortive,(int)$this->s['honba'],(int)$this->s['kyoku_index'],Mahjong::KYOKU_COUNT[(int)$this->s['taku']],$this->s['scores'],(int)$this->s['seats']);
         $this->s['honba']=$next['honba'];$this->s['advance_kyoku']=$next['advance'];$this->scoreRankCell();
         $this->cell(self::K_KYOKUEND,'<end_stat>'.($next['game_over']?1:0).'</end_stat>');$this->s['pending_choices']=null;$this->s['call_ctx']=null;
         if($next['game_over']){$this->s['state']='game_end';$this->s['finished']=true;}else{$this->s['state']='kyoku_end';}
     }
 
-    private function ryuukyoku():void
+    private function ryuukyoku(bool $abortive=false):void
     {
-        $status=RoundSettlement::tenpaiStatus($this->s['hands'],$this->s['melds'],(int)$this->s['seats'],(int)$this->s['taku']);
-        $settled=RoundSettlement::applyExhaustiveDraw($this->s['scores'],(int)$this->s['seats'],$status['tenpai']);$before=$this->s['scores'];$this->s['scores']=$settled['scores'];
-        $inner='<reason>0</reason>';
+        $before=array_values(array_pad(array_map('intval',$this->s['scores']),4,0));
+        if($abortive){$status=['tenpai'=>[],'waits'=>[]];$settled=['scores'=>$before,'deltas'=>[0,0,0,0]];}
+        else{$status=RoundSettlement::tenpaiStatus($this->s['hands'],$this->s['melds'],(int)$this->s['seats'],(int)$this->s['taku']);$settled=RoundSettlement::applyExhaustiveDraw($before,(int)$this->s['seats'],$status['tenpai']);}
+        $this->s['scores']=$settled['scores'];$inner='<reason>'.($abortive?1:0).'</reason>';
         for($i=0;$i<4;$i++){$is=in_array($i,$status['tenpai'],true);$waits=$is?($status['waits'][$i]??[]):[0];$inner.='<ryukyoku_status'.$i.'><end_stat>'.($is?1:0).'</end_stat>'.$this->ints('machi_pai',$this->pais($waits)).'</ryukyoku_status'.$i.'>';}
-        for($i=0;$i<4;$i++)$inner.='<calc_score'.$i.'><before_score>'.(int)($before[$i]??0).'</before_score><yaku_score>'.(int)$settled['deltas'][$i].'</yaku_score><kyotaku_score>0</kyotaku_score><tumifu_score>0</tumifu_score><new_score>'.(int)$this->s['scores'][$i].'</new_score><wherefore>0</wherefore></calc_score'.$i.'>';
-        $this->cell(self::K_RYUKYOKU,$inner);$this->finishKyoku([],true,$status['tenpai']);
+        $inner.=ResultXml::calcScores($before,$settled['deltas'],[0,0,0,0],[0,0,0,0]);
+        $this->cell(self::K_RYUKYOKU,$inner);$this->finishKyoku([],true,$status['tenpai'],$abortive);
     }
 
     private function cpuDiscardAfterCall(int $seat):void{$hand=$this->s['hands'][$seat];$best=(int)end($hand);$this->discard($seat,$best,false,false);}
@@ -288,6 +291,12 @@ final class Table
     private function ankanOptions(int $seat):array{$c=Mahjong::countsOf($this->s['hands'][$seat]);$o=[];for($i=0;$i<34;$i++)if(($c[$i]??0)===4)$o[]=$i;return $o;}
     private function updateFuriten(int $seat):void{$c=Mahjong::countsOf($this->s['hands'][$seat]);if(array_sum($c)%3!==1)return;$w=Mahjong::waitsOf($c,count($this->s['melds'][$seat]),(int)$this->s['taku']);$this->s['furiten'][$seat]=count(array_intersect($w,$this->s['discards'][$seat]))>0;}
     private function canReach(int $seat):bool{$hand=$this->s['hands'][$seat];foreach(array_values(array_unique($hand)) as $tile){$tmp=$hand;$k=array_search($tile,$tmp,true);unset($tmp[$k]);$tmp=array_values($tmp);if(Mahjong::shanten(Mahjong::countsOf($tmp),0,(int)$this->s['taku'])===0)return true;}return false;}
+    private function kyuushuOk(int $seat):bool
+    {
+        if(!empty($this->s['any_call'])||!empty($this->s['discards'][$seat])||(int)$this->s['discard_count']>=(int)$this->s['seats'])return false;
+        $kinds=[];foreach($this->s['hands'][$seat] as $tile)if(Mahjong::isYaochu((int)$tile))$kinds[(int)$tile]=true;
+        return count($kinds)>=9;
+    }
     private function scoreRankCell():void{$r=$this->ranks();$inner='<kyoutaku>'.(int)$this->s['kyotaku'].'</kyoutaku>';for($i=0;$i<4;$i++)$inner.='<riti_after'.$i.'><score>'.(int)$this->s['scores'][$i].'</score><rank>'.$r[$i].'</rank></riti_after'.$i.'>';$this->cell(self::K_SCORERANK,$inner);}
     /** @param list<int>|null $pis */
     private function cell(int $kind,string $inner,?array $pis=null):void{$seq=count($this->s['cells']);$targets=$pis??range(0,(int)$this->s['seats']-1);$flags='';for($i=0;$i<4;$i++)$flags.=' pi'.$i.'="'.(in_array($i,$targets,true)?1:0).'"';$this->s['cells'][]='<cell_data_'.$seq.' kind="'.$kind.'"'.$flags.'>'.$inner.'</cell_data_'.$seq.'>';}
