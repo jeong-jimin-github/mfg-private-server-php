@@ -37,6 +37,8 @@ jobs:
         run: php tests/round_settlement_test.php
       - name: Integrated table rules
         run: php tests/table_rules_integration_test.php
+      - name: Rob kakan
+        run: php tests/chankan_test.php
       - name: Match stream
         run: php tests/match_test.php
       - name: Calls and wins
