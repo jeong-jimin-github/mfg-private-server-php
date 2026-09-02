@@ -29,6 +29,8 @@ jobs:
         run: php tests/cardmng_eacoin_test.php
       - name: e-Amusement bootstrap parity
         run: php tests/eamuse_bootstrap_test.php
+      - name: GetMenuData parser contract
+        run: php tests/menu_contract_test.php
       - name: Mahjong core
         run: php tests/mahjong_test.php
       - name: Score math
