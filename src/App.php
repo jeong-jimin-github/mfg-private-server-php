@@ -20,6 +20,12 @@ final class App
         $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
         $body = file_get_contents('php://input') ?: '';
 
+        if ($path === '/health') {
+            http_response_code(200);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo "VFG local server ok\n";
+            return;
+        }
         if ($path === '/healthz') {
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode(['ok'=>true,'service'=>'mfg-private-server-php','time'=>time()], JSON_UNESCAPED_SLASHES);
