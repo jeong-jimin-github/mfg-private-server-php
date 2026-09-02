@@ -55,6 +55,8 @@ final class Dispatcher
     {
         $parts = parse_url($this->baseUrl) ?: [];
         $host = (string)($parts['host'] ?? '127.0.0.1');
+        $facilityIp = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false ? $host : gethostbyname($host);
+        if (filter_var($facilityIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) $facilityIp = '127.0.0.1';
         $port = (int)($parts['port'] ?? (($parts['scheme'] ?? '') === 'https' ? 443 : 80));
         $inner = '<location>'
             . $this->kitem('id','str','VFG00001')
@@ -75,7 +77,7 @@ final class Dispatcher
             . $this->kitem('id','str','0')
             . $this->kitem('class','u8',1)
             . '</line><portfw>'
-            . $this->kitem('globalip','ip4',$host)
+            . $this->kitem('globalip','ip4',$facilityIp)
             . $this->kitem('globalport','u16',$port)
             . $this->kitem('privateport','u16',$port)
             . '</portfw><public>'
