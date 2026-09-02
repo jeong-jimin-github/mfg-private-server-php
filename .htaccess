@@ -1,8 +1,15 @@
 RewriteEngine On
+
+# When the project root itself is the web root, existing files/directories would
+# otherwise bypass the front controller and be downloadable. Keep runtime state,
+# source, tests and CI metadata private while still allowing index.php/public/.
+RewriteRule ^(?:src|data|tests|\.github)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:config(?:\.example|\.local)?\.php|\.env|\.gitignore|README(?:\.[A-Za-z0-9_-]+)?\.md)$ - [F,L,NC]
+
+<FilesMatch "^(?:config(?:\.example|\.local)?\.php|\.env|\.gitignore|README(?:\.[A-Za-z0-9_-]+)?\.md)$">
+  Require all denied
+</FilesMatch>
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
-
-<FilesMatch "^(config\.local\.php|\.env)$">
-  Require all denied
-</FilesMatch>
