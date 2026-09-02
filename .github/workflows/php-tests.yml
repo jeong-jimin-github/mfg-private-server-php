@@ -35,3 +35,5 @@ jobs:
         run: php tests/calls_test.php
       - name: Features
         run: php tests/features_test.php
+      - name: Misc AOG
+        run: php tests/misc_test.php
