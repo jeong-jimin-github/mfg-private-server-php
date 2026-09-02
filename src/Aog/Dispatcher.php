@@ -13,6 +13,34 @@ final class Dispatcher
     private const GMODE_TAKU = [1=>0,2=>1,3=>2,4=>3,5=>0,6=>0,7=>2,8=>0,9=>0,10=>2,11=>0,12=>2,13=>0,14=>2,15=>0,16=>0,17=>2,18=>2,19=>2,20=>0,21=>2,22=>0,23=>2];
     private const SEATS = [0=>4,1=>4,2=>3,3=>2];
     private const START_SCORE = [0=>25000,1=>25000,2=>35000,3=>50000];
+    private const BASE_EVENTS = [
+        'SpiritGymBonusEvent','ConstancyFireReach','ConstancyFireReachAppearance',
+        'ConstancyAccelDora','ConstancyAccelDoraSchedule','ConstancyMentanpin',
+        'ConstancyMentanpinSchedule','StickerEditNotice','DecorationSticker',
+        'ChaosUsable','ClearAppearance','IyoAppearance','GrimAroeAppearance',
+        'CocoaAppearance','DiaAppearance','DoubrielAppearance','IppatsuAppearance',
+        'ShiroeAppearance','ShioriAppearance','PineAppearance','ZoudaiAppearance',
+        'CinderellaMitsubaAppearance','PremiumStartEnable','RevengeContinueEnable',
+        'EnableOdekake','ItemGainLogEnable','PrivateMatchingDisplay',
+        'PrivateMatchingEnable','FavoBonusEvent','FanBonusEvent','ReachSongVoiceGacha',
+    ];
+    private const EVENT_TAKU_SETS = [
+        'off' => [],
+        'min' => ['FireReach2','ComebackTakuEvent','KirisameTakuEvent'],
+        'all' => [
+            'BlowAwaySanma','FireReach2','Competition7','Competition8',
+            'AotenjoEvent2','ComebackTakuEvent','KirisameTakuEvent',
+            'MeldBonusTakuEvent2','Competition6','ReversalTakuEvent',
+            'BombTakuEvent','AllGreenTaku',
+        ],
+    ];
+    private const EVENT_TAKU_PANELS = [
+        'BlowAwaySanma'=>1,'FireReach2'=>1,'Competition7'=>0,'Competition8'=>0,
+        'AotenjoEvent2'=>1,'ComebackTakuEvent'=>1,'KirisameTakuEvent'=>1,
+        'MeldBonusTakuEvent2'=>2,'Competition6'=>0,'ReversalTakuEvent'=>1,
+        'BombTakuEvent'=>2,'AllGreenTaku'=>2,
+    ];
+    private const EVENT_TAKU_PANEL_SLOTS = 3;
 
     public function __construct(private Database $db) {}
 
@@ -43,7 +71,7 @@ final class Dispatcher
     private function appliBoot(): string{return $this->xml('<server_setting><mask_ac_link_scene>0</mask_ac_link_scene><reviewed_version>false</reviewed_version></server_setting><boot_mes><status>0</status><moserv_url>'.$this->x(rtrim($this->baseUrl(),'/').'/aog').'</moserv_url><message>0</message></boot_mes>');}
     private function appliInfo(): string
     {
-        $events=['SpiritGymBonusEvent','ConstancyFireReach','ConstancyFireReachAppearance','ConstancyAccelDora','ConstancyAccelDoraSchedule','ConstancyMentanpin','ConstancyMentanpinSchedule','StickerEditNotice','DecorationSticker','ChaosUsable','ClearAppearance','IyoAppearance','GrimAroeAppearance','CocoaAppearance','DiaAppearance','DoubrielAppearance','IppatsuAppearance','ShiroeAppearance','ShioriAppearance','PineAppearance','ZoudaiAppearance','CinderellaMitsubaAppearance','PremiumStartEnable','RevengeContinueEnable','EnableOdekake','ItemGainLogEnable','PrivateMatchingDisplay','PrivateMatchingEnable','FavoBonusEvent','FanBonusEvent','ReachSongVoiceGacha','FireReach2','ComebackTakuEvent','KirisameTakuEvent'];$list=[];
+        $events=self::BASE_EVENTS;foreach($this->eventTakuFlags() as $flag)$events[]=$flag;$list=[];
         foreach($events as $name)$list[]=['name'=>$name,'active'=>true,'begin'=>'2020/01/01 00:00:00','end'=>'2099/12/31 23:59:59','param'=>$name==='SpiritGymBonusEvent'?'OID=OID_DOJO_BONUS_3X':''];
         $eventsJson=json_encode(['list'=>$list],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)?:'{"list":[]}';$proJson=json_encode(['now_pro_stats'=>false,'ProStayDatas'=>[]],JSON_UNESCAPED_SLASHES)?:'{}';
         return $this->xml('<expire_seconds>3600</expire_seconds>'.$this->infoData('events',$eventsJson).$this->infoData('pro_stats',$proJson));
@@ -79,6 +107,18 @@ final class Dispatcher
     private function playmodeXml(): string{$s='<playmode_list>';foreach(self::GAME_MODES as $gmode){$taku=self::GMODE_TAKU[$gmode];$s.='<mode><gmode>'.$gmode.'</gmode><taku_class>1</taku_class><payment_mode>0</payment_mode><table_type>0</table_type><pmax>'.self::SEATS[$taku].'</pmax><tenbo>'.self::START_SCORE[$taku].'</tenbo><state>1</state><rate>0</rate><superior_border>0</superior_border></mode>';}return $s.'</playmode_list>';}
     private function battleItemXml(): string{$s='<battle_item_settings><basic_settings/><playmode_settings>';foreach(self::GAME_MODES as $gmode)$s.='<setting gmode="'.$gmode.'" taku_class="1"/>';return $s.'</playmode_settings></battle_item_settings>';}
     /** @return list<string> */ private function must(array $form): array{$raw=(string)($form['must']??'');if($raw==='')return [];$parts=preg_split('#[/,]#',$raw);return array_map('trim',$parts===false?[]:$parts);}
+    /** @return list<string> */
+    private function eventTakuFlags(): array
+    {
+        $asked=strtolower(trim((string)(getenv('VFG_EVENT_TAKU')?:'min')));
+        $name=array_key_exists($asked,self::EVENT_TAKU_SETS)?$asked:'min';
+        if($asked!==''&&$asked!==$name)error_log('[MFG] unknown VFG_EVENT_TAKU='.$asked.'; using min');
+        $flags=self::EVENT_TAKU_SETS[$name];$panels=0;
+        foreach($flags as $flag)$panels+=self::EVENT_TAKU_PANELS[$flag]??1;
+        if($panels>self::EVENT_TAKU_PANEL_SLOTS)error_log('[MFG] VFG_EVENT_TAKU='.$name.' advertises '.$panels.' event panels into '.self::EVENT_TAKU_PANEL_SLOTS.' slots');
+        return $flags;
+    }
+
     private function infoData(string $kind,string $payload): string{return '<info_data kind="'.$this->x($kind).'">'.base64_encode($payload).'</info_data>';}
     private function xml(string $inner=''): string{return '<?xml version="1.0" encoding="UTF-8"?><root><serv_st><code>0</code></serv_st>'.$inner.'</root>';}
     private function baseUrl(): string{$https=($_SERVER['HTTPS']??'')!==''&&($_SERVER['HTTPS']??'')!=='off';return ($https?'https':'http').'://'.($_SERVER['HTTP_HOST']??'127.0.0.1');}
