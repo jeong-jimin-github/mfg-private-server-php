@@ -53,7 +53,48 @@ final class Dispatcher
 
     private function facility(): string
     {
-        return $this->wrap('facility', '<location>' . $this->kitem('id','str','VFG00001') . $this->kitem('country','str','JP') . $this->kitem('region','str','13') . $this->kitem('name','str','LOCAL TEST') . '</location>');
+        $parts = parse_url($this->baseUrl) ?: [];
+        $host = (string)($parts['host'] ?? '127.0.0.1');
+        $port = (int)($parts['port'] ?? (($parts['scheme'] ?? '') === 'https' ? 443 : 80));
+        $inner = '<location>'
+            . $this->kitem('id','str','VFG00001')
+            . $this->kitem('country','str','JP')
+            . $this->kitem('region','str','13')
+            . $this->kitem('name','str','LOCAL TEST')
+            . $this->kitem('type','u8',0)
+            . $this->kitem('countryname','str','Japan')
+            . $this->kitem('countryjname','str','日本')
+            . $this->kitem('regionname','str','Tokyo')
+            . $this->kitem('regionjname','str','東京都')
+            . $this->kitem('customercode','str','VFG')
+            . $this->kitem('companycode','str','00')
+            . $this->kitem('latitude','s32',0)
+            . $this->kitem('longitude','s32',0)
+            . $this->kitem('accuracy','u8',0)
+            . '</location><line>'
+            . $this->kitem('id','str','0')
+            . $this->kitem('class','u8',1)
+            . '</line><portfw>'
+            . $this->kitem('globalip','ip4',$host)
+            . $this->kitem('globalport','u16',$port)
+            . $this->kitem('privateport','u16',$port)
+            . '</portfw><public>'
+            . $this->kitem('flag','u8',1)
+            . $this->kitem('name','str','LOCAL TEST')
+            . $this->kitem('latitude','s32',0)
+            . $this->kitem('longitude','s32',0)
+            . '</public><share><eacoin>'
+            . $this->kitem('notchamount','s32',0)
+            . $this->kitem('notchcount','s32',0)
+            . $this->kitem('supplylimit','s32',100000)
+            . '</eacoin><url>'
+            . $this->kitem('eapass','str',$this->baseUrl)
+            . $this->kitem('arcadefan','str',$this->baseUrl)
+            . $this->kitem('konaminetdx','str',$this->baseUrl)
+            . $this->kitem('konamiid','str',$this->baseUrl)
+            . $this->kitem('eagate','str',$this->baseUrl)
+            . '</url></share>';
+        return $this->wrap('facility', $inner);
     }
 
     private function vfgac(string $method): string
