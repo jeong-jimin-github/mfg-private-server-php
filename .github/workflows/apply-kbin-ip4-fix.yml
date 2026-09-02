@@ -1,0 +1,27 @@
+name: Apply KBin IPv4 codec fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-kbin-ip4-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch codec
+        run: python3 tools/patch_kbin_ip4.py
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Protocol/KBinXml.php
+          git diff --cached --exit-code && exit 1 || true
+          git commit -m "Fix KBin IPv4 type encoding"
+          git push origin HEAD:main
