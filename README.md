@@ -30,7 +30,7 @@ PHP 8.x port of `jeong-jimin-github/mfg-private-server` for shared-hosting deplo
 - `src/Aog/Dispatcher.php` — core AOG + match API
 - `src/Aog/FeatureDispatcher.php` — gacha / spirit gym
 - `src/Aog/GachaPools.php` — original generated gacha-pool loader
-- `src/Aog/MiscDispatcher.php` — sticker chat / profile / misc compatibility routes
+- `src/Aog/MiscDispatcher.php` / `StampStore.php` — sticker chat / misc compatibility routes
 - `src/Mahjong/Mahjong.php` — tile maths + shanten/waits
 - `src/Mahjong/HandEvaluator.php` — yaku/fu/han evaluation
 - `src/Mahjong/YakuBits.php` — client-facing yaku bit mapping
@@ -59,6 +59,7 @@ PHP 8.x port of `jeong-jimin-github/mfg-private-server` for shared-hosting deplo
 - empty-success compatibility modules
 - RC4 + LZ77 + request-mirrored kbin transport
 - original card compatibility switches and corrupt-card recovery behavior
+- original GET `/`, `/health`, `/status` compatibility page plus JSON `/healthz`
 
 ### AOG
 
@@ -71,9 +72,10 @@ PHP 8.x port of `jeong-jimin-github/mfg-private-server` for shared-hosting deplo
 - original-style `mgresult` player/rank/score/uma output
 - persistent table state across PHP-FPM requests
 - spirit gym four-slot real-time stock persistence
-- sticker chat and stamp polling persistence
+- original-format sticker chat and stamp polling persistence
 - full original generated gacha item pools from `data/gacha_pools.json`
-- unlock pickup items and pickup-character fallback guards
+- default 27-series safe gacha advertisement and optional full 141-series catalog
+- pickup preview recursion guards and N/R/SR/UR pool safety checks
 - reach-song pools for MusicHiyori / MusicSen / MusicYao / MusicTenshi / MusicMusashi
 - `VFG_EVENT_TAKU=off|min|all` event-table flag selection with the original three-panel safety budget
 - all Python `GAME_HANDLERS` names covered by AOG route smoke tests
@@ -98,9 +100,18 @@ PHP 8.x port of `jeong-jimin-github/mfg-private-server` for shared-hosting deplo
 - dora / ura-dora
 - client-facing yaku bit-field and result XML generation
 - exhaustive-draw tenpai detection and 3000-point noten settlement
-- kyuushu-kyuuhai abortive draw
+- kyuushu-kyuuhai abortive draw (the abortive-draw variant implemented by the Python reference)
 - dealer continuation, honba progression, all-last and bankruptcy termination
 - DB-serializable CPU turn loop and shanten-aware CPU discard/call decisions
+
+## Environment switches
+
+| Variable | Default | Effect |
+|---|---|---|
+| `VFG_EVENT_TAKU` | `min` | `off`, safe three-banner `min`, or known-overbudget `all` event-table advertisement |
+| `VFG_GACHA_ALL` | off | default 27 safe series; `1`, `true`, `yes`, or `on` advertises all 141 catalog series |
+| `VFG_CARDMNG_MODE` | `compat` | `strict` restores malformed-card quarantine behavior |
+| `VFG_CARDMNG_INQUIRE_MODE` | `auto` | `new` always returns the new-card response |
 
 ## Database configuration
 
@@ -123,21 +134,30 @@ If the host cannot expose environment variables, copy `config.example.php` to
 must not be committed.
 
 The schema is created automatically on first connection. SQLite and MySQL use
-the same `Database` API and both dialects have CI coverage.
+the same `Database` API and both dialects have CI coverage. CI also creates a
+second MySQL connection to verify that client state, serialized matches, sticker
+chat and gacha transactions survive independent PHP requests.
 
 ## Tests
 
-GitHub Actions runs the regression suite on PHP 8.1, 8.2 and 8.3. It also starts
-a real MySQL 8 service and runs the persistence API against it.
+GitHub Actions runs the main regression suite on PHP 8.1, 8.2 and 8.3, a real
+MySQL 8 persistence job, a real `php -S` HTTP transport job, and a PHP 8.2
+all-game-mode soak job.
 
 The suite covers protocol/kbin, cardmng/eacoin, e-Amusement bootstrap, vfglog,
 AOG parser contracts, event flags, mgresult, Mahjong scoring/rules, CPU behavior,
-gacha pools, every AOG route and full matches.
+gacha crash-safety, every AOG route and full matches.
 
 `tests/match_e2e_test.php` mirrors the Python `test_match_e2e.py` client loop:
-`entry_game -> gget/gpost -> KYOKUEND -> end_game`. With deterministic walls it
-completes all seven reference modes: NIMA, SANMA, TONPU, HANCHAN, FireReach,
-AccelDora and Bomb.
+`entry_game -> gget/gpost -> KYOKUEND -> end_game` across the seven reference
+modes. `tests/all_modes_soak_test.php` extends the same flow through all 23
+supported game modes; the current deterministic CI run completes 184 kyoku over
+2,830 request/response loops.
+
+`tests/app_transport_e2e_test.php` exercises the in-process App stack, while
+`tests/http_transport_client.php` sends the real binary RC4 + LZ77 + KBin wire
+format through a live `php -S` socket and also checks card quarantine, PASELI and
+AOG routing.
 
 Key tests include:
 
@@ -145,6 +165,9 @@ Key tests include:
 php tests/database_test.php
 php tests/protocol_test.php
 php tests/kbin_test.php
+php tests/app_transport_e2e_test.php
+php tests/http_transport_client.php       # requires the CI-style local PHP server
+php tests/health_test.php
 php tests/cardmng_eacoin_test.php
 php tests/eamuse_bootstrap_test.php
 php tests/vfglog_test.php
@@ -157,20 +180,20 @@ php tests/table_rules_integration_test.php
 php tests/multi_ron_test.php
 php tests/gacha_pools_test.php
 php tests/match_e2e_test.php
+php tests/all_modes_soak_test.php
+php tests/mysql_request_persistence_test.php
 php tests/aog_routes_test.php
 ```
 
 ## Remaining parity work
 
-The Python server remains the reference implementation. The large functional
-paths now have automated PHP parity coverage, but the remaining work is mainly
-byte/edge-case verification rather than missing top-level routes:
+The Python server remains the reference implementation. Missing top-level routes
+are no longer the main issue; remaining work is verification against the actual
+arcade client and wider randomized coverage:
 
-- remaining abortive-draw variants and exact first-go-around corner cases where the Python reference supports them
 - response-by-response comparison against captured real-client requests, especially binary kbin metadata/type details
-- end-to-end RC4 + LZ77 + kbin tests through the public `App` HTTP-dispatch layer, not only codec/dispatcher unit tests
-- long-running soak/fuzz coverage beyond the deterministic seven-mode match suite
-- real arcade-client confirmation for any fields not exercised by the current automated fixtures
+- multi-seed randomized match soak/fuzz coverage beyond the deterministic all-23-mode suite
+- real arcade-client confirmation for fields and timing behavior not exercised by automated fixtures
 
 ## Shared hosting
 
