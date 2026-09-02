@@ -35,6 +35,8 @@ jobs:
         run: php tests/menu_contract_test.php
       - name: AOG boot and matching parity
         run: php tests/aog_match_contract_test.php
+      - name: Event table flags
+        run: php tests/event_flags_test.php
       - name: Mahjong core
         run: php tests/mahjong_test.php
       - name: Score math
