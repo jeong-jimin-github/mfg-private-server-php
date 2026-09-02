@@ -62,7 +62,7 @@ final class FeatureDispatcher
     private function gachaInfo(): string
     {
         $body='<gacha_schedule>';
-        foreach(GachaPools::series() as $sid=>$entry) {
+        foreach(GachaPools::advertisedSeries() as $sid=>$entry) {
             $id=(int)$sid;$label=(string)($entry['name']??('Series'.$id));$stype=(string)($entry['type']??'Normal');$ticket=$id===1?1:0;
             $body.='<info><id>'.$id.'</id><label>'.$this->x($label).'</label><ticket_nr>'.$ticket.'</ticket_nr><now_active>1</now_active><series_type>'.$this->x($stype).'</series_type><items>';
             foreach(GachaPools::poolForSeries($id) as $oid)$body.='<item>'.$this->x($oid).'</item>';
@@ -77,7 +77,10 @@ final class FeatureDispatcher
 
     private function reqDrawGacha(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$series=(int)($form['series_id']??$form['gacha_id']??0);$count=max(1,min(10,(int)($form['count']??1)));
+        $pcuid=(string)($form['pcuid']??'GUEST');
+        $series=(int)($form['series_id']??$form['gacha_id']??0);
+        if(isset($form['gacha_name'])&&trim((string)$form['gacha_name'])!=='')$series=GachaPools::seriesIdByName((string)$form['gacha_name'])??$series;
+        $count=max(1,min(10,(int)($form['times']??$form['count']??1)));
         $pool=GachaPools::poolForSeries($series);if(!$pool)$pool=GachaPools::poolForSeries(0);$draw=[];
         for($i=0;$i<$count;$i++)$draw[]=$pool[random_int(0,count($pool)-1)];
         $entry=GachaPools::seriesEntry($series);$custom=GachaPools::customPickupItems($series);
@@ -88,7 +91,9 @@ final class FeatureDispatcher
 
     private function getGachaResult(array $form): string
     {
-        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('gacha',$pcuid,['items'=>[]]);$items=is_array($row['items']??null)?$row['items']:[];$body='<lottery_result>';
+        $pcuid=(string)($form['pcuid']??'GUEST');$row=$this->db->getKv('gacha',$pcuid,['items'=>[]]);$items=is_array($row['items']??null)?$row['items']:[];
+        $requested=max(1,min(10,(int)($form['times']??0)));if(!$items&&$requested>0)$items=array_fill(0,$requested,'');
+        $body='<lottery_result>';
         foreach($items as $oid)$body.='<data><character_id>0</character_id><unique_id>'.$this->x(substr(hash('sha256',(string)$oid.random_int(1,PHP_INT_MAX)),0,12)).'</unique_id></data>';
         return $this->xml($body.'</lottery_result><gift><acquired>0</acquired><prev>0</prev><after>0</after></gift>');
     }
