@@ -37,6 +37,12 @@ final class App
             echo 'game:    ' . rtrim($base, '/') . "/aog\n";
             return;
         }
+        if ($method === 'GET' && $path === '/core/keepalive') {
+            http_response_code(200);
+            header('Content-Type: text/plain');
+            echo 'ok';
+            return;
+        }
         if (str_starts_with($path, '/aog')) {
             $this->handleAog($path, $body);
             return;
@@ -51,12 +57,6 @@ final class App
         $name = trim(substr($path, strlen('/aog')), '/');
         if ($name === '') $name = trim((string)($_GET['f'] ?? ''), '/');
 
-        // The managed Reconnect request is not a normal /aog/<api> POST. It
-        // uses /aog/reconnect/<ver>/<session>/<webid>/, so treating the whole
-        // suffix as an API name makes it fall through to a generic success and
-        // loses the saved match. The Python reference notes this exact routing
-        // gap. Normalize only this known path-shaped endpoint and expose its
-        // segments as form fields while preserving explicit body values.
         if (str_starts_with($name, 'reconnect/')) {
             $parts = array_values(array_filter(explode('/', $name), static fn(string $v): bool => $v !== ''));
             $name = 'reconnect';
@@ -214,7 +214,8 @@ final class App
 
     private function baseUrl(): string
     {
-        $https = ($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off';
+        $forwarded = strtolower(trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0] ?? ''));
+        $https = $forwarded === 'https' || (($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off');
         $scheme = $https ? 'https' : 'http';
         return $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? '127.0.0.1');
     }
