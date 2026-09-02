@@ -77,8 +77,6 @@ final class FeatureDispatcher
 
     private function reqDrawGacha(array $form): string
     {
-        // Python reference only records transaction metadata here. The actual
-        // response rows are generated later from get_gacha_result.times.
         $pcuid=(string)($form['pcuid']??'GUEST');
         $times=(int)($form['times']??1);if($times===0)$times=1;
         $token=bin2hex(random_bytes(8));
@@ -103,9 +101,6 @@ final class FeatureDispatcher
 
     private function musicReserve(array $form): string
     {
-        // Python reference keeps a process-global monotonic request sequence and
-        // binds each request id to the requested series. Persist both pieces so
-        // PHP-FPM requests preserve the same contract.
         $series=(int)($form['gacha_id']??$form['series_id']??0);
         $last=(int)$this->db->getKv('music_gacha_meta','seq',1000);
         $req=max(1001,$last+1);
@@ -120,7 +115,9 @@ final class FeatureDispatcher
         $row=$req>0?$this->db->getKv('music_gacha',(string)$req,null):null;
         $series=is_array($row)?(int)($row['series']??0):0;
         if($req>0)$this->db->deleteKv('music_gacha',(string)$req);
-        $pool=GachaPools::poolForSeries($series);
+
+        $entry=GachaPools::seriesEntry($series);
+        $pool=(($entry['type']??'')==='Music')?GachaPools::poolForSeries($series):[];
         if(!$pool)$pool=GachaPools::poolForSeries(91);
         if(!$pool)$pool=['OID_ReachBgm148'];
         $oid=$pool[random_int(0,count($pool)-1)];
