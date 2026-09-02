@@ -29,6 +29,8 @@ jobs:
         run: php tests/score_math_test.php
       - name: Hand evaluator
         run: php tests/hand_evaluator_test.php
+      - name: Situational yaku
+        run: php tests/situational_yaku_test.php
       - name: Round settlement
         run: php tests/round_settlement_test.php
       - name: Match stream
