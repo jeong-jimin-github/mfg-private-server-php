@@ -159,6 +159,10 @@ jobs:
         run: |
           php tests/aog_stateful_reference_emit.php > /tmp/php-aog-stateful.json
           python tests/aog_stateful_reference_parity.py reference /tmp/php-aog-stateful.json
+      - name: e-Amusement XRPC parity with Python reference
+        run: |
+          php tests/eamuse_reference_emit.php > /tmp/php-eamuse-responses.json
+          python tests/eamuse_reference_parity.py reference /tmp/php-eamuse-responses.json
 
   soak:
     runs-on: ubuntu-latest
