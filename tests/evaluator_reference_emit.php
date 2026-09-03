@@ -22,7 +22,7 @@ $cases=[
     ['name'=>'honroutou_toitoi','hand'=>[1,1,1,9,9,9,31,31,31,35,35,35,37,37],'win'=>37,'tsumo'=>true,'seat'=>1,'round'=>0],
     ['name'=>'chinitsu','hand'=>[1,2,3,4,5,6,6,7,8,7,8,9,5,5],'win'=>9,'tsumo'=>true,'seat'=>1,'round'=>0],
     ['name'=>'dora_ura','hand'=>[1,2,3,4,5,6,21,22,23,24,25,26,17,17],'win'=>26,'tsumo'=>true,'seat'=>1,'round'=>0,'riichi'=>true,'dora'=>[5],'ura'=>[16]],
-    ['name'=>'open_tanyao','hand'=>[2,3,4,14,15,16,24,25,26,17,17],'melds'=>[['kind'=>'chi','tiles'=>[11,12,13]]],'win'=>26,'tsumo'=>false,'seat'=>1,'round'=>0],
+    ['name'=>'open_tanyao','hand'=>[2,3,4,14,15,16,24,25,26,17,17],'melds'=>[['kind'=>'chi','tiles'=>[12,13,14]]],'win'=>26,'tsumo'=>false,'seat'=>1,'round'=>0],
     ['name'=>'open_haku','hand'=>[1,2,3,14,15,16,27,28,29,5,5],'melds'=>[['kind'=>'pon','tiles'=>[35,35,35]]],'win'=>29,'tsumo'=>false,'seat'=>1,'round'=>0],
     ['name'=>'ankan_menzen','hand'=>[1,2,3,4,5,6,27,28,29,15,15],'melds'=>[['kind'=>'ankan','tiles'=>[35,35,35,35]]],'win'=>29,'tsumo'=>true,'seat'=>1,'round'=>0],
     ['name'=>'open_toitoi','hand'=>[1,1,1,9,9,9,11,11,11,25,25],'melds'=>[['kind'=>'pon','tiles'=>[37,37,37]]],'win'=>25,'tsumo'=>false,'seat'=>1,'round'=>0],
