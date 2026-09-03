@@ -10,6 +10,8 @@ use Mfg\Mahjong\HandEvaluator;
 use Mfg\Mahjong\Mahjong;
 
 function xr_idx(array $pai):array{return array_map([Mahjong::class,'paiToIdx'],$pai);}
+function xr_pai(array $idx):array{return array_map([Mahjong::class,'idxToPai'],$idx);}
+function xr_next(int &$state):int{$state=(int)((1103515245*$state+12345)&0x7fffffff);return $state;}
 
 $cases=[
     ['name'=>'pinfu_riichi','hand'=>[1,2,3,4,5,6,21,22,23,24,25,26,17,17],'win'=>26,'tsumo'=>true,'seat'=>1,'round'=>0,'riichi'=>true],
@@ -27,6 +29,33 @@ $cases=[
     ['name'=>'ankan_menzen','hand'=>[1,2,3,4,5,6,27,28,29,15,15],'melds'=>[['kind'=>'ankan','tiles'=>[35,35,35,35]]],'win'=>29,'tsumo'=>true,'seat'=>1,'round'=>0],
     ['name'=>'open_toitoi','hand'=>[1,1,1,9,9,9,11,11,11,25,25],'melds'=>[['kind'=>'pon','tiles'=>[37,37,37]]],'win'=>25,'tsumo'=>false,'seat'=>1,'round'=>0],
 ];
+
+// Deterministic closed winning-hand corpus. Riichi guarantees a legal yaku so
+// both scorers can compare decomposition choice, wait fu and pattern yaku.
+for($sample=0;$sample<256;$sample++){
+    $state=(0x5A17C9+$sample*0x10231)&0x7fffffff;
+    $counts=array_fill(0,34,0);$idx=[];
+    $pair=xr_next($state)%34;$counts[$pair]=2;$idx=[$pair,$pair];
+    for($set=0;$set<4;$set++){
+        for($attempt=0;$attempt<200;$attempt++){
+            $r=xr_next($state);
+            if(($r&1)===0){$b=($r>>1)%34;$tiles=[$b,$b,$b];}
+            else{$suit=($r>>1)%3;$b=$suit*9+(($r>>8)%7);$tiles=[$b,$b+1,$b+2];}
+            $ok=true;$need=[];foreach($tiles as $t){$need[$t]=($need[$t]??0)+1;if($counts[$t]+$need[$t]>4){$ok=false;break;}}
+            if(!$ok)continue;
+            foreach($tiles as $t){$counts[$t]++;$idx[]=$t;}
+            break;
+        }
+    }
+    if(count($idx)!==14)throw new RuntimeException('generated hand failed '.$sample);
+    sort($idx);$pick=xr_next($state)%14;$win=$idx[$pick];
+    $dora=xr_next($state)%34;$ura=xr_next($state)%34;
+    $cases[]=[
+        'name'=>'generated_'.$sample,'hand'=>xr_pai($idx),'win'=>Mahjong::idxToPai($win),
+        'tsumo'=>(bool)($sample&1),'seat'=>$sample%4,'round'=>intdiv($sample,4)%2,
+        'riichi'=>true,'dora'=>[Mahjong::idxToPai($dora)],'ura'=>[Mahjong::idxToPai($ura)],
+    ];
+}
 
 $out=[];
 foreach($cases as $c){
