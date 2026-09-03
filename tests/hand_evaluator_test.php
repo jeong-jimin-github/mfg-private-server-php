@@ -44,8 +44,11 @@ $r=ev([35,35,35,36,36,36,37,37,37,1,2,3,31,31],3,true,false);
 has($r,'Daisangen');
 if(($r['yakuman']??0)<1) throw new RuntimeException('daisangen yakuman');
 
-// Honroutou / toitoi style all terminals/honours.
+// Python reference sets the SuankoTanki yaku bit/name in shape analysis but
+// does not add it to the yakuman counter. Preserve that behavior exactly.
 $r=ev([1,1,1,9,9,9,31,31,31,35,35,35,37,37],37,true,false);
-has($r,'Honroto');has($r,'Toitoiho');
+has($r,'Honroto');has($r,'Toitoiho');has($r,'SuankoTanki');
+if(($r['yakuman']??-1)!==0) throw new RuntimeException('SuankoTanki yakuman parity');
+if(($r['rank']??0)!==7) throw new RuntimeException('SuankoTanki rank parity');
 
 echo "hand evaluator OK\n";
