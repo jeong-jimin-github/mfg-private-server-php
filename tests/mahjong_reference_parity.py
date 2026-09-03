@@ -17,13 +17,18 @@ def main() -> None:
     import mahjong as m  # type: ignore
 
     for taku in range(4):
-        row = php["taku"][str(taku)]
+        row = php["taku"][taku]
         assert row["seats"] == m.SEATS_OF[taku], (taku, "seats", row["seats"], m.SEATS_OF[taku])
         assert row["kyoku"] == m.KYOKU_COUNT[taku], (taku, "kyoku")
         assert row["start_score"] == m.START_SCORE[taku], (taku, "start_score")
         assert row["live"] == m.live_kinds(taku), (taku, "live")
+        raw_dora = row["dora"]
+        if isinstance(raw_dora, list):
+            actual_dora = {str(i): int(v) for i, v in enumerate(raw_dora)}
+        else:
+            actual_dora = {str(k): int(v) for k, v in raw_dora.items()}
         expected_dora = {str(i): m.dora_from_indicator(i, taku) for i in m.live_kinds(taku)}
-        assert row["dora"] == expected_dora, (taku, "dora", row["dora"], expected_dora)
+        assert actual_dora == expected_dora, (taku, "dora", actual_dora, expected_dora)
 
     for sample in php["samples"]:
         taku = int(sample["taku"])
