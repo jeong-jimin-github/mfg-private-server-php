@@ -10,10 +10,13 @@ $publicHt=(string)file_get_contents($root.'/public/.htaccess');
 $gi=(string)file_get_contents($root.'/.gitignore');
 
 // Fallback deployment where the whole project is the document root: protect
-// source/runtime state first, then route application URLs to root index.php.
-sh_ok(str_contains($ht,'(?:src|data|tests|\\.github)'),'private directory deny rule missing');
+// source/runtime/repository state first, then route application URLs to root
+// index.php. Existing directories otherwise bypass the front controller.
+foreach(['src','data','tests','tools','captures','\\.github','\\.git'] as $needle){
+    sh_ok(str_contains($ht,$needle),'private directory deny missing: '.$needle);
+}
 sh_ok(str_contains($ht,'[F,L,NC]'),'deny rule must stop with HTTP forbidden');
-foreach(['config(?:\\.example|\\.local)?\\.php','\\.env','\\.gitignore','README'] as $needle){
+foreach(['config(?:\\.example|\\.local)?\\.php','\\.env(?:\\.[^/]+)?','\\.gitignore','README'] as $needle){
     sh_ok(str_contains($ht,$needle),'sensitive file deny missing: '.$needle);
 }
 sh_ok(str_contains($ht,'RewriteCond %{REQUEST_FILENAME} !-f'),'root front-controller file guard missing');
