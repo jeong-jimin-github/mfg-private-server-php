@@ -18,7 +18,9 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: dom, simplexml, pdo_sqlite, mbstring
       - name: Syntax check
-        run: find src public tests -name '*.php' -print0 | xargs -0 -n1 php -l
+        run: |
+          php -l index.php
+          find src public tests -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Shared-hosting security config
         run: php tests/shared_hosting_security_test.php
       - name: SQLite database
@@ -122,6 +124,8 @@ jobs:
           php tests/http_card_entry_client.php
           php tests/http_reconnect_path_client.php
           php tests/http_proxy_client.php
+      - name: Request logging and auth handling
+        run: php tests/request_logging_http_test.php
 
   kbin-reference:
     runs-on: ubuntu-latest
