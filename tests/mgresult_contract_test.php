@@ -33,4 +33,14 @@ $r=mr_root($d->dispatch('end_game',['pcuid'=>'TIE']));$m=$r->mgresult;
 mr_ok((int)$m->player_1->rank===0&&(int)$m->player_1->uma===10000,'2p dealer-relative tie winner');
 mr_ok((int)$m->player_0->rank===1&&(int)$m->player_0->uma===-10000,'2p tie loser');
 
+// Python reference does not instantiate a table until the client is ready.
+// Ending from the matching room must therefore return initial scores and zero uma.
+$entry=mr_root($d->dispatch('entry_game',['pcuid'=>'PRE_READY','gmode'=>'4']));
+$tid=(int)$entry->entry->tid;
+$d->dispatch('gget',['pcuid'=>'PRE_READY','ready'=>'0','must'=>'VFG:J:A:A:2025122300/PRE_READY/'.$tid.'/0/1/0']);
+$pre=$db->getMatch('PRE_READY');mr_ok(($pre['table']??null)===null,'pre-ready gget must not instantiate table');
+$r=mr_root($d->dispatch('end_game',['pcuid'=>'PRE_READY']));$m=$r->mgresult;
+mr_ok((int)$m->player_0->rank===0&&(int)$m->player_0->score===35000&&(int)$m->player_0->uma===0,'pre-ready NIMA player 0');
+mr_ok((int)$m->player_1->rank===1&&(int)$m->player_1->score===35000&&(int)$m->player_1->uma===0,'pre-ready NIMA player 1');
+
 echo "end_game mgresult contract OK\n";
