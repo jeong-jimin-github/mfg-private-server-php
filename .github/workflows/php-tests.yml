@@ -167,6 +167,10 @@ jobs:
         run: |
           php tests/mahjong_reference_emit.php > /tmp/php-mahjong.json
           python tests/mahjong_reference_parity.py reference /tmp/php-mahjong.json
+      - name: Score math parity with Python reference
+        run: |
+          php tests/score_reference_emit.php > /tmp/php-score.json
+          python tests/score_reference_parity.py reference /tmp/php-score.json
 
   soak:
     runs-on: ubuntu-latest
