@@ -42,14 +42,16 @@ final class MatchClient
         me_ok(isset($entry->entry),'entry_game returned no entry');
         $this->tid=(int)$entry->entry->tid;$this->pindex=(int)$entry->entry->pindex;$this->nextSno=(int)$entry->entry->next_sno;
 
-        // Keep the complete handler path, but make the wall deterministic for CI.
+        // Keep Python-reference lifecycle (no Table before ready), while making
+        // the wall deterministic for CI via a match-level seed consumed at ready=1.
         $match=$this->db->getMatch($this->pcuid);me_ok(is_array($match),'match not persisted');
-        me_ok(is_array($match['table']??null),'table state not persisted');
-        $match['table']['seed']=0x4D460000+$this->gmode;
+        me_ok(($match['table']??null)===null,'table created before ready');
+        $match['seed']=0x4D460000+$this->gmode;
         $this->db->saveMatch($this->pcuid,$match);
 
         $poll=me_xml($this->d->dispatch('gget',['pcuid'=>$this->pcuid,'ready'=>'0','next_sno'=>(string)$this->nextSno]));
         me_ok(isset($poll->game->mwait),'matching poll returned no mwait');
+        $match=$this->db->getMatch($this->pcuid);me_ok(($match['table']??null)===null,'ready=0 created table');
 
         $queue=[me_xml($this->d->dispatch('gget',['pcuid'=>$this->pcuid,'ready'=>'1','next_sno'=>(string)$this->nextSno]))];
         $guard=0;$idle=0;
