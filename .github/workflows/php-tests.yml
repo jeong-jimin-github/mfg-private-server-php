@@ -171,6 +171,10 @@ jobs:
         run: |
           php tests/score_reference_emit.php > /tmp/php-score.json
           python tests/score_reference_parity.py reference /tmp/php-score.json
+      - name: Hand evaluator parity with Python reference
+        run: |
+          php tests/evaluator_reference_emit.php > /tmp/php-evaluator.json
+          python tests/evaluator_reference_parity.py reference /tmp/php-evaluator.json
 
   soak:
     runs-on: ubuntu-latest
