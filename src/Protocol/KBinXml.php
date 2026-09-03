@@ -389,7 +389,13 @@ final class KBinXml
             if ($size === 1) $v = ord($chunk[0] ?? "\0");
             elseif ($size === 2) $v = unpack('n', $chunk)[1];
             elseif ($size === 4) $v = self::u32($chunk);
-            else $v = self::u64String($chunk);
+            else {
+                $u=unpack('Nhi/Nlo',str_pad($chunk,8,"\0"));
+                $hi=(int)$u['hi'];$lo=(int)$u['lo'];
+                $v=(($fmt['signed']??false)===true)
+                    ? self::signedU64PartsToDecimal($hi,$lo)
+                    : self::u64PartsToDecimal($hi,$lo);
+            }
             if (($fmt['signed'] ?? false) === true && is_int($v)) {
                 $bits = $size*8; if ($bits < PHP_INT_SIZE*8 && $v >= (1 << ($bits-1))) $v -= (1 << $bits);
             }
@@ -403,11 +409,11 @@ final class KBinXml
         $out=''; $size=$fmt['size'];
         foreach ($tokens as $token) {
             if (($fmt['float'] ?? false) === true) { $out .= pack($size===4?'G':'E', (float)$token); continue; }
+            if($size===8){$out.=self::packU64((string)$token,(bool)($fmt['signed']??false));continue;}
             $v = (int)$token;
             if ($size===1) $out .= chr($v & 0xFF);
             elseif ($size===2) $out .= pack('n', $v & 0xFFFF);
-            elseif ($size===4) $out .= pack('N', $v & 0xFFFFFFFF);
-            else $out .= self::packU64($token);
+            else $out .= pack('N', $v & 0xFFFFFFFF);
         }
         return $out;
     }
@@ -439,8 +445,90 @@ final class KBinXml
     private static function readU32(string $s,int &$pos): int { $v=self::u32(substr($s,$pos,4)); $pos+=4; return $v; }
     private static function u32(string $s): int { $u=unpack('N',str_pad($s,4,"\0")); return (int)$u[1]; }
     private static function writeAt(string &$s,int $off,string $raw): void { for($i=0;$i<strlen($raw);$i++) $s[$off+$i]=$raw[$i]; }
-    private static function u64String(string $s): string
-    { $u=unpack('Nhi/Nlo',str_pad($s,8,"\0")); return sprintf('%.0f', $u['hi']*4294967296.0+$u['lo']); }
-    private static function packU64(string|int $v): string
-    { $f=(float)$v; $hi=(int)floor($f/4294967296.0); $lo=(int)fmod($f,4294967296.0); return pack('NN',$hi,$lo); }
+
+    private static function signedU64PartsToDecimal(int $hi,int $lo): string
+    {
+        if(($hi&0x80000000)===0)return self::u64PartsToDecimal($hi,$lo);
+        $magLo=((~$lo)&0xFFFFFFFF)+1;$carry=0;
+        if($magLo>0xFFFFFFFF){$magLo=0;$carry=1;}
+        $magHi=(((~$hi)&0xFFFFFFFF)+$carry)&0xFFFFFFFF;
+        return '-'.self::u64PartsToDecimal($magHi,$magLo);
+    }
+
+    private static function u64PartsToDecimal(int $hi,int $lo): string
+    {
+        return self::decimalAddSmall(self::decimalMulSmall((string)$hi,4294967296),$lo);
+    }
+
+    private static function packU64(string|int $v,bool $signed=false): string
+    {
+        $s=trim((string)$v);
+        if(!preg_match('/^-?\d+$/',$s))throw new \RuntimeException('Invalid 64-bit integer: '.$s);
+        $negative=str_starts_with($s,'-');$digits=$negative?substr($s,1):$s;
+        $digits=ltrim($digits,'0');if($digits==='')$digits='0';
+        if($negative&&!$signed)throw new \RuntimeException('Negative value for u64: '.$s);
+        if($signed){
+            $limit=$negative?'9223372036854775808':'9223372036854775807';
+            if(self::compareDecimal($digits,$limit)>0)throw new \RuntimeException('s64 out of range: '.$s);
+        }elseif(self::compareDecimal($digits,'18446744073709551615')>0){
+            throw new \RuntimeException('u64 out of range: '.$s);
+        }
+        [$hi,$lo]=self::decimalToU64Parts($digits);
+        if($negative&&$digits!=='0'){
+            $lo=((~$lo)&0xFFFFFFFF)+1;$carry=0;
+            if($lo>0xFFFFFFFF){$lo=0;$carry=1;}
+            $hi=(((~$hi)&0xFFFFFFFF)+$carry)&0xFFFFFFFF;
+        }
+        return pack('NN',$hi,$lo);
+    }
+
+    /** @return array{0:int,1:int} */
+    private static function decimalToU64Parts(string $digits): array
+    {
+        [$q,$lo]=self::decimalDivMod($digits,4294967296);
+        if(self::compareDecimal($q,'4294967295')>0)throw new \RuntimeException('u64 out of range: '.$digits);
+        return [(int)$q,$lo];
+    }
+
+    /** @return array{0:string,1:int} */
+    private static function decimalDivMod(string $digits,int $divisor): array
+    {
+        $q='';$carry=0;
+        $len=strlen($digits);
+        for($i=0;$i<$len;$i++){
+            $n=$carry*10+(ord($digits[$i])-48);
+            $d=intdiv($n,$divisor);$carry=$n%$divisor;
+            if($q!==''||$d!==0)$q.=(string)$d;
+        }
+        return [$q===''?'0':$q,$carry];
+    }
+
+    private static function decimalMulSmall(string $digits,int $factor): string
+    {
+        $carry=0;$out='';
+        for($i=strlen($digits)-1;$i>=0;$i--){
+            $n=(ord($digits[$i])-48)*$factor+$carry;
+            $out=(string)($n%10).$out;$carry=intdiv($n,10);
+        }
+        while($carry>0){$out=(string)($carry%10).$out;$carry=intdiv($carry,10);}
+        return ltrim($out,'0')?:'0';
+    }
+
+    private static function decimalAddSmall(string $digits,int $small): string
+    {
+        $carry=$small;$out='';
+        for($i=strlen($digits)-1;$i>=0;$i--){
+            $n=(ord($digits[$i])-48)+$carry;
+            $out=(string)($n%10).$out;$carry=intdiv($n,10);
+        }
+        while($carry>0){$out=(string)($carry%10).$out;$carry=intdiv($carry,10);}
+        return ltrim($out,'0')?:'0';
+    }
+
+    private static function compareDecimal(string $a,string $b): int
+    {
+        $a=ltrim($a,'0');$b=ltrim($b,'0');if($a==='')$a='0';if($b==='')$b='0';
+        if(strlen($a)!==strlen($b))return strlen($a)<=>strlen($b);
+        return $a<=>$b;
+    }
 }
