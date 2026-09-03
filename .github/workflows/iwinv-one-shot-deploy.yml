@@ -64,20 +64,11 @@ jobs:
           chmod 600 /tmp/iwinv.json
           jq -e '.ftp_host and .ftp_user and .ftp_pass' /tmp/iwinv.json >/dev/null
 
-      - name: Prepare shared-hosting config
+      - name: Prepare SQLite shared-hosting config
         shell: bash
         run: |
           set -euo pipefail
-          db_dsn=$(jq -r '.db_dsn // empty' /tmp/iwinv.json)
-          db_user=$(jq -r '.db_user // empty' /tmp/iwinv.json)
-          db_pass=$(jq -r '.db_pass // empty' /tmp/iwinv.json)
-          if [ -n "$db_dsn" ]; then
-            DB_DSN="$db_dsn" DB_USER="$db_user" DB_PASS="$db_pass" php -r '
-              $q=static fn(string $v): string => var_export($v,true);
-              file_put_contents("config.local.php", "<?php\nreturn [\n    \'db_dsn\' => ".$q(getenv("DB_DSN")).",\n    \'db_user\' => ".$q(getenv("DB_USER")).",\n    \'db_pass\' => ".$q(getenv("DB_PASS")).",\n];\n");
-            '
-          else
-            cat > config.local.php <<'PHP'
+          cat > config.local.php <<'PHP'
           <?php
           return [
               'db_dsn' => 'sqlite:' . __DIR__ . '/data/mfg.sqlite',
@@ -85,7 +76,6 @@ jobs:
               'db_pass' => '',
           ];
           PHP
-          fi
 
       - name: Upload safely to public_html
         shell: bash
