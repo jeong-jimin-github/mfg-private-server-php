@@ -13,6 +13,7 @@ function am_ok(bool $v,string $m):void{if(!$v)throw new RuntimeException($m);}
 function am_xml(string $xml):SimpleXMLElement{$r=new SimpleXMLElement($xml);am_ok($r->getName()==='root','AOG root');am_ok((string)$r->serv_st->code==='0','serv_st');return $r;}
 
 $_SERVER['HTTP_HOST']='127.0.0.1:18080';
+unset($_SERVER['HTTP_X_FORWARDED_PROTO'],$_SERVER['HTTPS']);
 $db=new Database('sqlite::memory:');
 $d=new Dispatcher($db);
 
@@ -35,6 +36,7 @@ $db->saveProfilePayload('MATCH_REF',$payload);
 
 $entry=am_xml($d->dispatch('entry_game',['pcuid'=>$pcuid,'gmode'=>'3']));
 am_ok((string)$entry->entry->gmode==='3','entry gmode');
+am_ok((string)$entry->entry->gserv_url==='http://127.0.0.1:18080/aog/','entry gserv_url');
 $gget=am_xml($d->dispatch('gget',['pcuid'=>$pcuid,'ready'=>'0','must'=>'0/0/0/0/0/0']));
 $m=$gget->game->mwait;
 am_ok((string)$m->status==='1','mwait status');
@@ -52,10 +54,22 @@ am_ok(($states['customize_item']??'')==='custom-state','customize state');
 am_ok((string)$m->mend->player_1['ptype']==='3'&&(string)$m->mend->player_2['ptype']==='3','CPU players');
 am_ok((string)$m->mend->player_1->cpu_name!=='OID_CHARACTER_2','CPU reused selected character');
 
+// Shared hosting/reverse proxies terminate TLS before PHP. The AOG dispatcher
+// must honor X-Forwarded-Proto just like App and reconnect do, otherwise the
+// client is redirected from HTTPS back to an unusable HTTP game endpoint.
+$_SERVER['HTTP_HOST']='jm0730.iwinv.net';
+$_SERVER['HTTP_X_FORWARDED_PROTO']='https';
+$proxyBoot=am_xml($d->dispatch('appli_boot',[]));
+am_ok((string)$proxyBoot->boot_mes->moserv_url==='https://jm0730.iwinv.net/aog','forwarded https moserv_url');
+$proxyEntry=am_xml($d->dispatch('entry_game',['pcuid'=>$pcuid,'gmode'=>'3']));
+am_ok((string)$proxyEntry->entry->gserv_url==='https://jm0730.iwinv.net/aog/','forwarded https gserv_url');
+unset($_SERVER['HTTP_X_FORWARDED_PROTO']);
+$_SERVER['HTTP_HOST']='127.0.0.1:18080';
+
 // Original client separates `must` fields with '/', not commas. Verify the
 // misc dispatcher routes a stamp request to the TID supplied at index 2.
 $d->dispatch('gchat',['tid'=>'7','mid'=>'1','pindex'=>'0','name'=>'MATCHER','contents'=>'STAMP-SLASH']);
 $stamp=am_xml($d->dispatch('gget_stamp_info',['must'=>'0/0/7/0/1','stamp_info'=>'0,0,,']));
 am_ok(str_contains($stamp->asXML()?:'','STAMP-SLASH'),'slash-delimited must was not parsed');
 
-echo "AOG boot/matching/must contract OK\n";
+echo "AOG boot/matching/proxy/must contract OK\n";
