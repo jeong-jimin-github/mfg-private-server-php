@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-check deterministic e-Amusement/XRPC responses with Python reference."""
+"""Cross-check e-Amusement/XRPC responses with the Python reference server."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 MODEL = "VFG:J:A:A:2025122300"
-BASE = "http://127.0.0.1:8080"
 CARD = "E0047CC78DFBA459"
 
 
@@ -71,7 +70,20 @@ def main() -> None:
             py["pcbevent"] = call("pcbevent", "put")
             py["eventlog"] = call("eventlog", "write")
             py["vfgac"] = call("vfgac", "service_list")
+            py["vfgac_update_refer"] = call("vfgac", "update_refer")
+            py["vfgac_ext_campaign"] = call("vfgac", "ext_campaign")
+            py["vfgac_send_paylog"] = call("vfgac", "send_paylog")
 
+            for module in ("posevent", "pkglist", "userdata", "userid", "sidmgr", "netlog", "local", "local2"):
+                py[f"generic_{module}"] = call(module, "noop")
+            py["generic_unknown"] = call("unknown_module", "noop")
+
+            py["card_missing_inquire"] = call("vfgcard", "inquire")
+            py["card_missing_getrefid"] = call("vfgcard", "getrefid")
+            py["card_missing_bind"] = call("vfgcard", "bindmodel")
+            py["card_unknown_bind"] = call(
+                "vfgcard", "bindmodel", module_xml("vfgcard", refid="A000000000000000")
+            )
             py["card_new"] = call("vfgcard", "inquire", module_xml("vfgcard", cardid=CARD))
             py["card_issue"] = call(
                 "vfgcard", "getrefid", module_xml("vfgcard", cardid=CARD, passwd="1234")
@@ -85,13 +97,26 @@ def main() -> None:
             py["card_auth"] = call(
                 "vfgcard", "authpass", module_xml("vfgcard", refid=refid, passwd="1234")
             )
+            py["card_getdatalist"] = call(
+                "vfgcard", "getdatalist", module_xml("vfgcard", refid=refid)
+            )
             py["card_bind"] = call("vfgcard", "bindmodel", module_xml("vfgcard", refid=refid))
             py["card_bound"] = call("vfgcard", "inquire", module_xml("vfgcard", cardid=CARD))
+            os.environ["VFG_CARDMNG_INQUIRE_MODE"] = "new"
+            py["card_forced_new"] = call("vfgcard", "inquire", module_xml("vfgcard", cardid=CARD))
+            os.environ["VFG_CARDMNG_INQUIRE_MODE"] = "auto"
             os.environ["VFG_CARDMNG_MODE"] = "strict"
             py["card_malformed_strict"] = call(
                 "vfgcard", "inquire", module_xml("vfgcard", cardid="BAD")
             )
+            py["card_malformed_getrefid_strict"] = call(
+                "vfgcard", "getrefid", module_xml("vfgcard", cardid="BAD", passwd="1234")
+            )
             os.environ["VFG_CARDMNG_MODE"] = "compat"
+            py["card_malformed_compat"] = call(
+                "vfgcard", "inquire", module_xml("vfgcard", cardid="BAD")
+            )
+            py["legacy_card_missing"] = call("cardmng", "inquire")
 
             py["eacoin_checkin"] = call("eacoin", "checkin")
             checkin = ET.fromstring(py["eacoin_checkin"])
@@ -107,7 +132,14 @@ def main() -> None:
             py["eacoin_checkout"] = call(
                 "eacoin", "checkout", f"<call><sessid>{sess}</sessid></call>"
             )
+            py["eacoin_balance_after_checkout"] = call(
+                "eacoin", "getbalance", f"<call><sessid>{sess}</sessid></call>"
+            )
+            py["eacoin_opcheckin"] = call("eacoin", "opcheckin")
             py["eacoin_log"] = call("eacoin", "getlog")
+            py["eacoin_oplog"] = call("eacoin", "getoplog")
+            py["eacoin_campaign"] = call("eacoin", "getcampaign")
+            py["eacoin_unknown"] = call("eacoin", "unknown")
 
             assert set(php) == set(py), (sorted(php), sorted(py))
             for name in py:
