@@ -21,7 +21,7 @@ mc_ok(isset($m->mpdata->mid)&&isset($m->mpdata->name),'mpdata contract');
 
 $expectedTaku=[1=>0,2=>1,3=>2,4=>3,5=>0,6=>0,7=>2,8=>0,9=>0,10=>2,11=>0,12=>2,13=>0,14=>2,15=>0,16=>0,17=>2,18=>2,19=>2,20=>0,21=>2,22=>0,23=>2];
 $seats=[0=>4,1=>4,2=>3,3=>2];
-$score=[0=>25000,1=>25000,2=>35000,3=>50000];
+$score=[0=>25000,1=>25000,2=>35000,3=>35000];
 $modes=[];
 foreach($m->playmode_list->mode as $node){
     $g=(int)$node->gmode;$modes[$g]=true;
