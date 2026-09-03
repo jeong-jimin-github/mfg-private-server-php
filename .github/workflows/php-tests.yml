@@ -175,6 +175,10 @@ jobs:
         run: |
           php tests/evaluator_reference_emit.php > /tmp/php-evaluator.json
           python tests/evaluator_reference_parity.py reference /tmp/php-evaluator.json
+      - name: CPU AI parity with Python reference
+        run: |
+          php tests/cpu_reference_emit.php > /tmp/php-cpu.json
+          python tests/cpu_reference_parity.py reference /tmp/php-cpu.json
 
   soak:
     runs-on: ubuntu-latest
