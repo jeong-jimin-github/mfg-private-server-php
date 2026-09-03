@@ -59,6 +59,36 @@ kb_ok($facilityDoc->getElementsByTagName('class')->item(0)?->textContent==='1','
 kb_ok($facilityDoc->getElementsByTagName('globalip')->item(0)?->textContent==='127.0.0.1','facility-like ip4 alignment');
 kb_ok($facilityDoc->getElementsByTagName('globalport')->item(0)?->textContent==='18080','facility-like u16 alignment');
 
+// KBin has true 64-bit integer types. PHP integers cannot represent u64 max
+// and the previous codec converted both directions through float, losing low
+// bits above 2^53. Exercise exact decimal-string round trips at every boundary.
+$wide='<?xml version="1.0" encoding="UTF-8"?><root>'
+    .'<smin __type="s64">-9223372036854775808</smin>'
+    .'<smax __type="s64">9223372036854775807</smax>'
+    .'<umax __type="u64">18446744073709551615</umax>'
+    .'<spair __type="2s64">-9007199254740993 9007199254740993</spair>'
+    .'<upair __type="2u64">9007199254740993 18446744073709551615</upair>'
+    .'</root>';
+foreach([true,false] as $compressed){
+    $wideDoc=kb_doc(KBinXml::decode(KBinXml::encode($wide,'UTF-8',$compressed))['xml']);
+    kb_ok($wideDoc->getElementsByTagName('smin')->item(0)?->textContent==='-9223372036854775808','s64 minimum precision');
+    kb_ok($wideDoc->getElementsByTagName('smax')->item(0)?->textContent==='9223372036854775807','s64 maximum precision');
+    kb_ok($wideDoc->getElementsByTagName('umax')->item(0)?->textContent==='18446744073709551615','u64 maximum precision');
+    kb_ok($wideDoc->getElementsByTagName('spair')->item(0)?->textContent==='-9007199254740993 9007199254740993','2s64 precision');
+    kb_ok($wideDoc->getElementsByTagName('upair')->item(0)?->textContent==='9007199254740993 18446744073709551615','2u64 precision');
+}
+
+foreach([
+    '<root><bad __type="u64">18446744073709551616</bad></root>',
+    '<root><bad __type="u64">-1</bad></root>',
+    '<root><bad __type="s64">9223372036854775808</bad></root>',
+    '<root><bad __type="s64">-9223372036854775809</bad></root>',
+] as $bad){
+    $threw=false;
+    try{KBinXml::encode($bad,'UTF-8',true);}catch(RuntimeException){$threw=true;}
+    kb_ok($threw,'64-bit out-of-range value accepted: '.$bad);
+}
+
 // Real cabinets use legacy Japanese encodings too. Verify that both string
 // payloads and attribute payloads survive the binary format in both node-name
 // modes, while the decoder reports the original kbin encoding metadata.
@@ -78,4 +108,4 @@ foreach(['CP932','EUC-JP'] as $encoding){
     }
 }
 
-echo "kbin UTF-8/CP932/EUC-JP + IPv4/alignment round-trip OK\n";
+echo "kbin UTF-8/CP932/EUC-JP + IPv4/alignment/exact-64-bit round-trip OK\n";
