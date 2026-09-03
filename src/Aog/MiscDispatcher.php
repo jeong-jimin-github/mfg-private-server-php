@@ -24,7 +24,7 @@ final class MiscDispatcher
             'get_haifu_data' => $this->xml(),
             'get_jongstone_info' => $this->xml('<jongstone_info><free_point>0</free_point><record_point>0</record_point></jongstone_info>'),
             'get_mg' => $this->xml('<mg_info><mg>0</mg><additional_mg>0</additional_mg></mg_info>'),
-            'mission_date' => $this->xml($this->infoData('missions','{"list":[]}')),
+            'mission_date' => $this->xml($this->infoData('missions','{"list": []}')),
             'present_done' => $this->presentDone($form),
             'competition_entry' => $this->xml('<competition><entry_result>1</entry_result></competition>'),
             'chk_tabooword' => $this->xml('<taboo_chk><result>0</result></taboo_chk>'),
