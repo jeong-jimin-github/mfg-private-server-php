@@ -28,7 +28,6 @@ final class FeatureDispatcher
             'gacha_log'=>$this->logOnly($form,'gacha'),
             'music_gacha_play_reserve'=>$this->musicReserve($form),
             'music_gacha_play'=>$this->musicPlay($form),
-            'mission_date'=>$this->xml('<info_data kind="missions">'.base64_encode('{"list": []}').'</info_data>'),
             default=>null,
         };
     }
