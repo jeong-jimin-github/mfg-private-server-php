@@ -135,7 +135,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: dom, mbstring
+          extensions: dom, simplexml, pdo_sqlite, mbstring
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -151,6 +151,10 @@ jobs:
           php tests/transport_reference_interop.php emit /tmp/transport-from-php.bin
           python tests/transport_reference_interop.py reference /tmp/transport-from-php.bin /tmp/transport-from-python.bin
           php tests/transport_reference_interop.php check /tmp/transport-from-python.bin
+      - name: Deterministic AOG response parity with Python reference
+        run: |
+          php tests/aog_reference_emit.php > /tmp/php-aog-responses.json
+          python tests/aog_reference_parity.py reference /tmp/php-aog-responses.json
 
   soak:
     runs-on: ubuntu-latest
