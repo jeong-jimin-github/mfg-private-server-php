@@ -156,7 +156,7 @@ final class HandEvaluator
         for($s=0;$s<3;$s++)if(in_array($s*9,$runs,true)&&in_array($s*9+3,$runs,true)&&in_array($s*9+6,$runs,true)){$han+=$menzen?2:1;$y[]=$menzen?'Ikkitsukan':'IkkitsukanNaki';break;}
         for($n=0;$n<9;$n++)if(in_array($n,$trips,true)&&in_array(9+$n,$trips,true)&&in_array(18+$n,$trips,true)){$han+=2;$y[]='Sansyokudoko';break;}
         if(count($trips)===4){$han+=2;$y[]='Toitoiho';}
-        $closedCounts=Mahjong::countsOf($hand);$ankou=0;foreach($melds as $m)if(($m['kind']??'')==='ankan')$ankou++;foreach($sets as [$k,$b])if($k===self::KOTSU){if(!$isTsumo&&$b===$winTile&&$closedCounts[$b]===3)continue;$ankou++;}if($ankou>=4){$ym+=($pair===$winTile?2:1);$y[]=$pair===$winTile?'SuankoTanki':'Suanko';}elseif($ankou===3){$han+=2;$y[]='Sananko';}
+        $closedCounts=Mahjong::countsOf($hand);$ankou=0;foreach($melds as $m)if(($m['kind']??'')==='ankan')$ankou++;foreach($sets as [$k,$b])if($k===self::KOTSU){if(!$isTsumo&&$b===$winTile&&$closedCounts[$b]===3)continue;$ankou++;}if($ankou>=4){$y[]=$pair===$winTile?'SuankoTanki':'Suanko';}elseif($ankou===3){$han+=2;$y[]='Sananko';}
         $touch=true;$hasRun=false;$hasHonor=Mahjong::isHonor($pair);foreach($full as [$k,$b]){if($k===self::SHUNTSU){$hasRun=true;if(!in_array($b%9,[0,6],true))$touch=false;}else{if(!Mahjong::isYaochu($b))$touch=false;if(Mahjong::isHonor($b))$hasHonor=true;}}if(!Mahjong::isYaochu($pair))$touch=false;if($touch&&$hasRun){if($hasHonor){$han+=$menzen?2:1;$y[]=$menzen?'Chanta':'ChantaNaki';}else{$han+=$menzen?3:2;$y[]=$menzen?'Junchan':'JunchanNaki';}}
         return ['han'=>$han,'yaku'=>$y,'yakuman'=>$ym];
     }
