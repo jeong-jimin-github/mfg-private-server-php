@@ -42,11 +42,13 @@ final class AllModesClient
         as_ok(isset($entry->entry),'entry_game missing gmode='.$this->gmode);
         $this->pindex=(int)$entry->entry->pindex;$this->nextSno=(int)$entry->entry->next_sno;
 
-        $match=$this->db->getMatch($this->pcuid);as_ok(is_array($match)&&is_array($match['table']??null),'match not persisted gmode='.$this->gmode);
-        $match['table']['seed']=$this->seedBase+$this->gmode;
+        $match=$this->db->getMatch($this->pcuid);as_ok(is_array($match),'match not persisted gmode='.$this->gmode);
+        as_ok(($match['table']??null)===null,'table created before ready gmode='.$this->gmode);
+        $match['seed']=$this->seedBase+$this->gmode;
         $this->db->saveMatch($this->pcuid,$match);
 
         $this->d->dispatch('gget',['pcuid'=>$this->pcuid,'ready'=>'0','next_sno'=>(string)$this->nextSno]);
+        $match=$this->db->getMatch($this->pcuid);as_ok(($match['table']??null)===null,'ready=0 created table gmode='.$this->gmode);
         $queue=[as_xml($this->d->dispatch('gget',['pcuid'=>$this->pcuid,'ready'=>'1','next_sno'=>(string)$this->nextSno]))];
         $guard=0;$idle=0;
         while(!$this->done&&$guard<5000){
