@@ -19,6 +19,34 @@ $requestLogFile = $root . '/data/requests.log';
 $requestBody = file_get_contents('php://input');
 if (!is_string($requestBody)) $requestBody = '';
 
+$requestAuthorization = trim((string)(
+    $_SERVER['HTTP_AUTHORIZATION']
+    ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+    ?? $_SERVER['Authorization']
+    ?? ''
+));
+if ($requestAuthorization === '' && function_exists('getallheaders')) {
+    $headers = getallheaders();
+    if (is_array($headers)) {
+        foreach ($headers as $name => $value) {
+            if (strcasecmp((string)$name, 'Authorization') === 0) {
+                $requestAuthorization = trim((string)$value);
+                break;
+            }
+        }
+    }
+}
+
+$basicAuthUser = isset($_SERVER['PHP_AUTH_USER']) ? (string)$_SERVER['PHP_AUTH_USER'] : '';
+$basicAuthPassword = isset($_SERVER['PHP_AUTH_PW']) ? (string)$_SERVER['PHP_AUTH_PW'] : '';
+if (($basicAuthUser === '' && $basicAuthPassword === '')
+    && preg_match('/^Basic\s+(.+)$/i', $requestAuthorization, $match) === 1) {
+    $decoded = base64_decode(trim((string)$match[1]), true);
+    if (is_string($decoded) && str_contains($decoded, ':')) {
+        [$basicAuthUser, $basicAuthPassword] = explode(':', $decoded, 2);
+    }
+}
+
 $extractPasswords = static function (array $values, string $prefix = '') use (&$extractPasswords): array {
     $found = [];
     foreach ($values as $key => $value) {
@@ -37,7 +65,7 @@ $extractPasswords = static function (array $values, string $prefix = '') use (&$
     return $found;
 };
 
-register_shutdown_function(static function () use ($requestStarted, $requestLogFile, $requestBody, $extractPasswords): void {
+register_shutdown_function(static function () use ($requestStarted, $requestLogFile, $requestBody, $extractPasswords, $requestAuthorization, $basicAuthUser, $basicAuthPassword): void {
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
     $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
     $function = trim((string)($_GET['f'] ?? ''));
@@ -70,8 +98,8 @@ register_shutdown_function(static function () use ($requestStarted, $requestLogF
             $passwords['xml_' . strtolower((string)$match[1]) . '_' . ($index + 1)] = (string)$match[2];
         }
     }
-    if (isset($_SERVER['PHP_AUTH_PW'])) {
-        $passwords['http_basic'] = (string)$_SERVER['PHP_AUTH_PW'];
+    if ($basicAuthPassword !== '') {
+        $passwords['http_basic'] = $basicAuthPassword;
     }
 
     $forwardedFor = trim((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
@@ -100,9 +128,9 @@ register_shutdown_function(static function () use ($requestStarted, $requestLogF
         'body_encoding' => $bodyEncoding,
         'body' => $storedBody,
         'passwords' => $passwords,
-        'basic_auth_user' => isset($_SERVER['PHP_AUTH_USER']) ? (string)$_SERVER['PHP_AUTH_USER'] : '-',
-        'basic_auth_password' => isset($_SERVER['PHP_AUTH_PW']) ? (string)$_SERVER['PHP_AUTH_PW'] : '-',
-        'authorization' => (string)($_SERVER['HTTP_AUTHORIZATION'] ?? '-'),
+        'basic_auth_user' => $basicAuthUser !== '' ? $basicAuthUser : '-',
+        'basic_auth_password' => $basicAuthPassword !== '' ? $basicAuthPassword : '-',
+        'authorization' => $requestAuthorization !== '' ? $requestAuthorization : '-',
         'duration_ms' => round((microtime(true) - $requestStarted) * 1000, 1),
     ];
 
