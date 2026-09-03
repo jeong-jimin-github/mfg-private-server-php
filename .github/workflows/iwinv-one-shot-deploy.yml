@@ -3,6 +3,8 @@ name: One-shot iwinv deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.deploy/**'
 
 permissions:
   contents: read
@@ -24,10 +26,6 @@ jobs:
           set -euo pipefail
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out /tmp/iwinv-deploy-private.pem >/dev/null 2>&1
           openssl pkey -in /tmp/iwinv-deploy-private.pem -pubout -out /tmp/iwinv-deploy-public.pem >/dev/null 2>&1
-          echo 'IWINV_DEPLOY_PUBLIC_KEY_BEGIN'
-          base64 -w0 /tmp/iwinv-deploy-public.pem
-          echo
-          echo 'IWINV_DEPLOY_PUBLIC_KEY_END'
 
       - name: Upload one-shot public key
         uses: actions/upload-artifact@v4
@@ -37,7 +35,6 @@ jobs:
           retention-days: 1
 
       - name: Wait for encrypted deployment payload
-        id: payload
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,10 +57,7 @@ jobs:
             fi
             sleep 3
           done
-          if [ "$found" != "1" ]; then
-            echo 'Encrypted deployment payload was not supplied in time.' >&2
-            exit 1
-          fi
+          [ "$found" = "1" ] || { echo 'Encrypted deployment payload was not supplied in time.' >&2; exit 1; }
           openssl pkeyutl -decrypt -inkey /tmp/iwinv-deploy-private.pem \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
             -in /tmp/iwinv.enc -out /tmp/iwinv.json
@@ -80,7 +74,7 @@ jobs:
           if [ -n "$db_dsn" ]; then
             DB_DSN="$db_dsn" DB_USER="$db_user" DB_PASS="$db_pass" php -r '
               $q=static fn(string $v): string => var_export($v,true);
-              file_put_contents("config.local.php", "<?php\nreturn [\n    \\"db_dsn\\" => ".$q(getenv("DB_DSN")).",\n    \\"db_user\\" => ".$q(getenv("DB_USER")).",\n    \\"db_pass\\" => ".$q(getenv("DB_PASS")).",\n];\n");
+              file_put_contents("config.local.php", "<?php\nreturn [\n    \'db_dsn\' => ".$q(getenv("DB_DSN")).",\n    \'db_user\' => ".$q(getenv("DB_USER")).",\n    \'db_pass\' => ".$q(getenv("DB_PASS")).",\n];\n");
             '
           else
             cat > config.local.php <<'PHP'
@@ -93,7 +87,7 @@ jobs:
           PHP
           fi
 
-      - name: Upload to iwinv FTP
+      - name: Upload safely to public_html
         shell: bash
         run: |
           set -euo pipefail
@@ -102,26 +96,9 @@ jobs:
           host=$(jq -r '.ftp_host' /tmp/iwinv.json)
           user=$(jq -r '.ftp_user' /tmp/iwinv.json)
           pass=$(jq -r '.ftp_pass' /tmp/iwinv.json)
-          requested=$(jq -r '.remote_dir // empty' /tmp/iwinv.json)
-
-          cat > /tmp/list.lftp <<EOF
-          set ftp:ssl-allow false
-          set net:max-retries 2
-          set net:timeout 15
-          open -u "$user","$pass" "ftp://$host"
-          cls -1
-          bye
-          EOF
-          lftp -f /tmp/list.lftp > /tmp/remote-list.txt
-
-          remote="$requested"
-          if [ -z "$remote" ]; then
-            for d in public_html html www htdocs wwwroot web; do
-              if grep -Fxq "$d" /tmp/remote-list.txt; then remote="$d"; break; fi
-            done
-          fi
-          [ -n "$remote" ] || remote="."
-          echo "Deploying to FTP directory: $remote"
+          remote=$(jq -r '.remote_dir // "public_html"' /tmp/iwinv.json)
+          [ -n "$remote" ] || remote=public_html
+          echo "Deploying safely to FTP directory: $remote"
 
           cat > /tmp/deploy.lftp <<EOF
           set ftp:ssl-allow false
@@ -129,13 +106,17 @@ jobs:
           set net:timeout 20
           set mirror:parallel-transfer-count 4
           open -u "$user","$pass" "ftp://$host"
-          mirror -R --delete --only-newer --verbose \
+          cd "$remote"
+          mirror -R --ignore-time --verbose \
             --exclude-glob .git/ \
             --exclude-glob .github/ \
+            --exclude-glob .deploy/ \
             --exclude-glob tests/ \
             --exclude-glob tools/ \
             --exclude-glob '*.sqlite' \
-            ./ "$remote/"
+            --exclude-glob '.gitignore' \
+            --exclude-glob 'README.md' \
+            ./ ./
           bye
           EOF
           lftp -f /tmp/deploy.lftp
@@ -145,21 +126,19 @@ jobs:
         run: |
           set -euo pipefail
           site=$(jq -r '.site_url // "https://jm0730.iwinv.net/"' /tmp/iwinv.json)
+          ok=0
           for path in health healthz /; do
             url="${site%/}/${path#/}"
             code=$(curl -k -L -sS -o /tmp/site-body -w '%{http_code}' --max-time 20 "$url" || true)
             echo "$url -> HTTP $code"
-            if [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 500 ] 2>/dev/null; then
-              head -c 500 /tmp/site-body || true
-              echo
-              exit 0
-            fi
+            head -c 500 /tmp/site-body || true
+            echo
+            if [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 400 ] 2>/dev/null; then ok=1; break; fi
           done
-          echo 'Site verification failed.' >&2
-          exit 1
+          [ "$ok" = "1" ] || { echo 'Site verification failed.' >&2; exit 1; }
 
       - name: Destroy one-shot private key
         if: always()
         shell: bash
         run: |
-          rm -f /tmp/iwinv-deploy-private.pem /tmp/iwinv-deploy-public.pem /tmp/iwinv.json /tmp/iwinv.enc /tmp/deploy.lftp /tmp/list.lftp
+          rm -f /tmp/iwinv-deploy-private.pem /tmp/iwinv-deploy-public.pem /tmp/iwinv.json /tmp/iwinv.enc /tmp/deploy.lftp
