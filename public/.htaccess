@@ -1,5 +1,9 @@
 RewriteEngine On
 
+# Preserve Authorization for PHP running behind CGI/FastCGI.
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%1]
+
 # Recommended deployment: point the Apache document root at public/. Route all
 # application paths (AOG, e-Amusement helpers, health and reconnect URLs) into
 # the single PHP front controller while leaving real static files untouched.
