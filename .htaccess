@@ -1,5 +1,9 @@
 RewriteEngine On
 
+# Preserve Authorization for PHP running behind CGI/FastCGI.
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%1]
+
 # Fallback deployment where the whole repository is the document root. Existing
 # files/directories bypass the front controller, so deny source, runtime state,
 # repository metadata and CLI tooling before the rewrite rules below run.
