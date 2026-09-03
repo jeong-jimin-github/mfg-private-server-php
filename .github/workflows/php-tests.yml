@@ -121,6 +121,7 @@ jobs:
           php tests/http_facility_ip4_client.php
           php tests/http_card_entry_client.php
           php tests/http_reconnect_path_client.php
+          php tests/http_proxy_client.php
 
   soak:
     runs-on: ubuntu-latest
