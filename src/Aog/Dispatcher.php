@@ -129,6 +129,11 @@ final class Dispatcher
 
     private function infoData(string $kind,string $payload): string{return '<info_data kind="'.$this->x($kind).'">'.base64_encode($payload).'</info_data>';}
     private function xml(string $inner=''): string{return '<?xml version="1.0" encoding="UTF-8"?><root><serv_st><code>0</code></serv_st>'.$inner.'</root>';}
-    private function baseUrl(): string{$https=($_SERVER['HTTPS']??'')!==''&&($_SERVER['HTTPS']??'')!=='off';return ($https?'https':'http').'://'.($_SERVER['HTTP_HOST']??'127.0.0.1');}
+    private function baseUrl(): string
+    {
+        $forwarded=strtolower(trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_PROTO']??''))[0]??''));
+        $https=$forwarded==='https'||(($_SERVER['HTTPS']??'')!==''&&($_SERVER['HTTPS']??'')!=='off');
+        return ($https?'https':'http').'://'.($_SERVER['HTTP_HOST']??'127.0.0.1');
+    }
     private function x(string $s): string{return htmlspecialchars($s,ENT_QUOTES|ENT_XML1,'UTF-8');}
 }
