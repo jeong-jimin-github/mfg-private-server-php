@@ -1,0 +1,158 @@
+name: One-shot iwinv deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_PAYLOAD_PATH: .deploy/iwinv.enc
+
+jobs:
+  deploy:
+    if: github.actor == 'jeong-jimin-github'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare one-shot key
+        shell: bash
+        run: |
+          set -euo pipefail
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out /tmp/iwinv-deploy-private.pem >/dev/null 2>&1
+          openssl pkey -in /tmp/iwinv-deploy-private.pem -pubout -out /tmp/iwinv-deploy-public.pem >/dev/null 2>&1
+          echo 'IWINV_DEPLOY_PUBLIC_KEY_BEGIN'
+          base64 -w0 /tmp/iwinv-deploy-public.pem
+          echo
+          echo 'IWINV_DEPLOY_PUBLIC_KEY_END'
+
+      - name: Wait for encrypted deployment payload
+        id: payload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${REPO}/contents/${DEPLOY_PAYLOAD_PATH}?ref=${REF}"
+          found=0
+          for i in $(seq 1 90); do
+            code=$(curl -L -sS -o /tmp/payload-meta.json -w '%{http_code}' \
+              -H 'Accept: application/vnd.github+json' \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "$api" || true)
+            if [ "$code" = "200" ]; then
+              jq -r '.content' /tmp/payload-meta.json | tr -d '\n' | base64 -d > /tmp/iwinv.enc
+              found=1
+              break
+            fi
+            sleep 3
+          done
+          if [ "$found" != "1" ]; then
+            echo 'Encrypted deployment payload was not supplied in time.' >&2
+            exit 1
+          fi
+          openssl pkeyutl -decrypt -inkey /tmp/iwinv-deploy-private.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in /tmp/iwinv.enc -out /tmp/iwinv.json
+          chmod 600 /tmp/iwinv.json
+          jq -e '.ftp_host and .ftp_user and .ftp_pass' /tmp/iwinv.json >/dev/null
+
+      - name: Prepare shared-hosting config
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_dsn=$(jq -r '.db_dsn // empty' /tmp/iwinv.json)
+          db_user=$(jq -r '.db_user // empty' /tmp/iwinv.json)
+          db_pass=$(jq -r '.db_pass // empty' /tmp/iwinv.json)
+          if [ -n "$db_dsn" ]; then
+            DB_DSN="$db_dsn" DB_USER="$db_user" DB_PASS="$db_pass" php -r '
+              $q=static fn(string $v): string => var_export($v,true);
+              file_put_contents("config.local.php", "<?php\nreturn [\n    \\"db_dsn\\" => ".$q(getenv("DB_DSN")).",\n    \\"db_user\\" => ".$q(getenv("DB_USER")).",\n    \\"db_pass\\" => ".$q(getenv("DB_PASS")).",\n];\n");
+            '
+          else
+            cat > config.local.php <<'PHP'
+          <?php
+          return [
+              'db_dsn' => 'sqlite:' . __DIR__ . '/data/mfg.sqlite',
+              'db_user' => '',
+              'db_pass' => '',
+          ];
+          PHP
+          fi
+
+      - name: Upload to iwinv FTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
+          host=$(jq -r '.ftp_host' /tmp/iwinv.json)
+          user=$(jq -r '.ftp_user' /tmp/iwinv.json)
+          pass=$(jq -r '.ftp_pass' /tmp/iwinv.json)
+          requested=$(jq -r '.remote_dir // empty' /tmp/iwinv.json)
+
+          cat > /tmp/list.lftp <<EOF
+          set ftp:ssl-allow false
+          set net:max-retries 2
+          set net:timeout 15
+          open -u "$user","$pass" "ftp://$host"
+          cls -1
+          bye
+          EOF
+          lftp -f /tmp/list.lftp > /tmp/remote-list.txt
+
+          remote="$requested"
+          if [ -z "$remote" ]; then
+            for d in public_html html www htdocs wwwroot web; do
+              if grep -Fxq "$d" /tmp/remote-list.txt; then remote="$d"; break; fi
+            done
+          fi
+          [ -n "$remote" ] || remote="."
+          echo "Deploying to FTP directory: $remote"
+
+          cat > /tmp/deploy.lftp <<EOF
+          set ftp:ssl-allow false
+          set net:max-retries 2
+          set net:timeout 20
+          set mirror:parallel-transfer-count 4
+          open -u "$user","$pass" "ftp://$host"
+          mirror -R --delete --only-newer --verbose \
+            --exclude-glob .git/ \
+            --exclude-glob .github/ \
+            --exclude-glob tests/ \
+            --exclude-glob tools/ \
+            --exclude-glob '*.sqlite' \
+            ./ "$remote/"
+          bye
+          EOF
+          lftp -f /tmp/deploy.lftp
+
+      - name: Verify site
+        shell: bash
+        run: |
+          set -euo pipefail
+          site=$(jq -r '.site_url // "https://jm0730.iwinv.net/"' /tmp/iwinv.json)
+          for path in health healthz /; do
+            url="${site%/}/${path#/}"
+            code=$(curl -k -L -sS -o /tmp/site-body -w '%{http_code}' --max-time 20 "$url" || true)
+            echo "$url -> HTTP $code"
+            if [ "$code" -ge 200 ] 2>/dev/null && [ "$code" -lt 500 ] 2>/dev/null; then
+              head -c 500 /tmp/site-body || true
+              echo
+              exit 0
+            fi
+          done
+          echo 'Site verification failed.' >&2
+          exit 1
+
+      - name: Destroy one-shot private key
+        if: always()
+        shell: bash
+        run: |
+          rm -f /tmp/iwinv-deploy-private.pem /tmp/iwinv-deploy-public.pem /tmp/iwinv.json /tmp/iwinv.enc /tmp/deploy.lftp /tmp/list.lftp
