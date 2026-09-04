@@ -5,7 +5,7 @@ declare(strict_types=1);
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
-if (!($method === 'GET' && $path === '/' && $_GET === [] && str_contains($accept, 'text/html'))) {
+if (!($method === 'GET' && in_array($path, ['/', '/index.php'], true) && $_GET === [] && str_contains($accept, 'text/html'))) {
     require __DIR__ . '/public/index.php';
     return;
 }
