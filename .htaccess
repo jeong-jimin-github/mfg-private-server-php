@@ -1,12 +1,5 @@
 RewriteEngine On
 
-# Native e-Amusement clients send encrypted binary XRPC bodies without a
-# Content-Type. The hosting WAF redirects those valid requests before PHP can
-# decode them, so disable ModSecurity for this dedicated application vhost.
-<IfModule mod_security2.c>
-  SecRuleEngine Off
-</IfModule>
-
 # Preserve Authorization for PHP running behind CGI/FastCGI.
 RewriteCond %{HTTP:Authorization} ^(.+)$
 RewriteRule ^ - [E=HTTP_AUTHORIZATION:%1]
