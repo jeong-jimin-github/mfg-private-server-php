@@ -22,6 +22,7 @@ foreach(['config(?:\\.example|\\.local)?\\.php','\\.env(?:\\.[^/]+)?','\\.gitign
 }
 sh_ok(str_contains($ht,'RewriteCond %{HTTP:Authorization} ^(.+)$'),'root Authorization condition missing');
 sh_ok(str_contains($ht,'[E=HTTP_AUTHORIZATION:%1]'),'root Authorization forwarding missing');
+sh_ok(str_contains($ht,'<IfModule mod_security2.c>')&&str_contains($ht,'SecRuleEngine Off'),'root binary XRPC WAF exception missing');
 sh_ok(str_contains($ht,'RewriteCond %{REQUEST_FILENAME} !-f'),'root front-controller file guard missing');
 sh_ok(str_contains($ht,'RewriteCond %{REQUEST_FILENAME} !-d'),'root front-controller directory guard missing');
 sh_ok(str_contains($ht,'RewriteRule ^ index.php [QSA,L]'),'root front-controller rewrite missing');
@@ -32,6 +33,7 @@ sh_ok(str_contains($ht,'RewriteRule ^ index.php [QSA,L]'),'root front-controller
 sh_ok(str_contains($publicHt,'RewriteEngine On'),'public rewrite engine missing');
 sh_ok(str_contains($publicHt,'RewriteCond %{HTTP:Authorization} ^(.+)$'),'public Authorization condition missing');
 sh_ok(str_contains($publicHt,'[E=HTTP_AUTHORIZATION:%1]'),'public Authorization forwarding missing');
+sh_ok(str_contains($publicHt,'<IfModule mod_security2.c>')&&str_contains($publicHt,'SecRuleEngine Off'),'public binary XRPC WAF exception missing');
 sh_ok(str_contains($publicHt,'RewriteCond %{REQUEST_FILENAME} !-f'),'public front-controller file guard missing');
 sh_ok(str_contains($publicHt,'RewriteCond %{REQUEST_FILENAME} !-d'),'public front-controller directory guard missing');
 sh_ok(str_contains($publicHt,'RewriteRule ^ index.php [QSA,L]'),'public front-controller rewrite missing');
